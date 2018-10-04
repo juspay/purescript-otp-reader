@@ -15,7 +15,6 @@ module Juspay.OTP.OTPReader (
 
 import Prelude
 
-import Juspay.Compat (Eff, Aff, delay, liftEff, makeAff, parAff)
 import Control.Monad.Except (runExcept)
 import Data.Array (catMaybes, cons, elem, findMap, length, null, (!!))
 import Data.Either (Either(..), hush)
@@ -26,9 +25,11 @@ import Data.Foreign.NullOrUndefined (NullOrUndefined(..), unNullOrUndefined)
 import Data.Generic.Rep (class Generic)
 import Data.Maybe (Maybe(..), fromMaybe, isJust, maybe)
 import Data.Newtype (class Newtype, unwrap, wrap)
-import Data.String.Regex (Regex, match, regex)
+import Data.String.Regex (Regex, regex)
 import Data.String.Regex.Flags (ignoreCase)
 import Data.Time.Duration (Milliseconds)
+import Juspay.Compat (Aff, Eff, delay, liftEff, makeAff, match, parAff)
+import Juspay.Compat (id) as Compat -- To prevent shadow definitions warning for `id` from `Prelude`
 
 -- | Internal type used for encoding from and decoding to `OtpRule`.
 newtype OtpRule' = OtpRule' {
@@ -193,7 +194,7 @@ smsReceiver = do
   smsString <- makeAff startSmsReceiver
   liftEff $ stopSmsReceiver
   --TODO track sms receive event
-  let sms = (decodeAndTrack >>> hush >>> maybe [] id) smsString
+  let sms = (decodeAndTrack >>> hush >>> maybe [] Compat.id) smsString
   if length sms < 0
     then smsReceiver
     else pure sms
@@ -209,7 +210,7 @@ smsPoller startTime pollFrequency = do
   delay pollFrequency
   smsString <- liftEff $ readSms startTime
   --TODO track sms receive event
-  let sms = (decodeAndTrack >>> hush >>> maybe [] id) smsString
+  let sms = (decodeAndTrack >>> hush >>> maybe [] Compat.id) smsString
   if length sms < 1
     then smsPoller startTime pollFrequency
     else pure sms
