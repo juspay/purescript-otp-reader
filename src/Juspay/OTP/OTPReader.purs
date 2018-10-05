@@ -177,7 +177,7 @@ requestSmsReadPermission = do
 -- | value can be passed back to this function so that if the same SMS is
 -- | found again by the SMS poller, it will be ignored. Every subsequent call
 -- | of `getOtp` can be passed a `ProcessedSms` value from the previous run
-getOtp :: forall e. Array OtpRule -> String -> Milliseconds -> ProcessedSms -> Aff e Result
+getOtp :: forall e. Array OtpRule -> Number -> Milliseconds -> ProcessedSms -> Aff e Result
 getOtp rules startTime pollFrequency processed = do
   isGranted <- requestSmsReadPermission
   if not isGranted then pure $ Error "SMS Read permission not granted"
@@ -206,10 +206,10 @@ smsReceiver = do
 -- | Array. If no SMSs after the given timestamp are found, it will sleep for
 -- | the given time interval (second arguemnt) and try again until it finds at
 -- | least 1 new SMS.
-smsPoller :: forall e. String -> Milliseconds -> Aff e (Array Sms)
+smsPoller :: forall e. Number -> Milliseconds -> Aff e (Array Sms)
 smsPoller startTime pollFrequency = do
   delay pollFrequency
-  smsString <- liftEff $ readSms startTime
+  smsString <- liftEff $ readSms $ show startTime
   --TODO track sms receive event
   let sms = (decodeAndTrack >>> hush >>> maybe [] Compat.id) smsString
   if length sms < 1
