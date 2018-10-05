@@ -120,8 +120,9 @@ noProcessed = ProcessedSms []
 
 -- | Type representing the final response from `getOtp`. When an OTP has
 -- | been successfully extracted from an SMS, the `MatchedOtp` constructer is
--- | returned. If an error occured, `Error` is returned.
-data Result = MatchedOtp String ProcessedSms | Error String
+-- | returned with the OTP itself and the SMS from which it was extracted.
+-- | If an error occured, `Error` is returned.
+data Result = MatchedOtp String Sms ProcessedSms | Error String
 
 derive instance genericResult :: Generic Result _
 instance encodeResult :: Encode Result where encode = genericEncode defaultOptions {unwrapSingleConstructors = true}
@@ -253,7 +254,7 @@ matchAndExtract (OtpRule rule) (ProcessedSms processed) sms =
         group = fromMaybe 0 rule.group
         otp = join $ makeRegex rule.otp >>= (\r -> match r sms'.body) >>= (\arr -> arr !! group)
       in case otp of
-        Just otp' -> Just $ MatchedOtp otp' $ ProcessedSms $ hashSms (Sms sms') `cons` processed
+        Just otp' -> Just $ MatchedOtp otp' (Sms sms') $ ProcessedSms $ hashSms (Sms sms') `cons` processed
         Nothing -> Nothing
 
     makeRegex :: String -> Maybe Regex
