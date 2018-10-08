@@ -161,7 +161,7 @@ requestSmsReadPermission = do
 -- | The first argument is the list of `OtpRule`s of which a received SMS
 -- | should match at least one.
 -- |
--- | The second argument should be a UNIX timestamp string in milliseconds
+-- | The second argument should be a UNIX timestamp in milliseconds
 -- | which represents the start time the SMS poller should be interested in
 -- | when polling for new SMSs.
 -- |
