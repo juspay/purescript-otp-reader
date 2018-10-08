@@ -11,11 +11,11 @@ getSmsReadPermission = doAff do OTP.getSmsReadPermission
 requestSmsReadPermission :: Flow Boolean
 requestSmsReadPermission = doAff do OTP.requestSmsReadPermission
 
-getOtp :: Array OtpRule -> String -> Milliseconds -> ProcessedSms -> Flow Result
+getOtp :: Array OtpRule -> Number -> Milliseconds -> ProcessedSms -> Flow Result
 getOtp rules startTime pollFrequency processed = doAff do OTP.getOtp rules startTime pollFrequency processed
 
 smsReceiver :: Flow (Array Sms)
 smsReceiver = doAff do OTP.smsReceiver
 
-smsPoller :: String -> Milliseconds -> Flow (Array Sms)
+smsPoller :: Number -> Milliseconds -> Flow (Array Sms)
 smsPoller startTime pollFrequency = doAff do OTP.smsPoller startTime pollFrequency
