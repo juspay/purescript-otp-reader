@@ -3,11 +3,13 @@ module Juspay.Compat where
 import Prelude
 
 import Control.Category as Cat
-import Control.Monad.Aff (Aff, delay, makeAff, parallel, sequential) as Aff
-import Control.Monad.Aff (nonCanceler)
+import Control.Monad.Aff (error)
+import Control.Monad.Aff as Aff
 import Control.Monad.Eff (Eff) as Eff
 import Control.Monad.Eff.Class (class MonadEff)
 import Control.Monad.Eff.Class (liftEff) as Eff
+import Control.Monad.Eff.Exception (throwException)
+import Control.Monad.Eff.Unsafe (unsafeCoerceEff)
 import Data.Either (Either(..))
 import Data.Foldable (oneOf)
 import Data.Foreign (Foreign) as Foreign
@@ -28,7 +30,16 @@ liftEff :: forall a m eff. MonadEff eff m => Eff eff a -> m a
 liftEff = Eff.liftEff
 
 makeAff :: forall e a. ((a -> Eff e Unit) -> Eff e Unit) -> Aff e a
-makeAff eff = Aff.makeAff (\callback -> eff (Right >>> callback) *> pure nonCanceler)
+makeAff eff = Aff.makeAff (\callback -> eff (Right >>> callback) *> pure Aff.nonCanceler)
+
+makeAffCanceler :: forall e a. ((a -> Eff e Unit) -> Eff e (Eff e Unit)) -> Aff e a
+makeAffCanceler effCanceler = Aff.makeAff (\callback -> do
+    canceler <- effCanceler (Right >>> callback)
+    pure $ Aff.effCanceler canceler
+  )
+
+throw :: forall e a. String -> Aff e a
+throw msg = liftEff $ unsafeCoerceEff $ throwException $ error msg
 
 parAff :: forall e a. Array (Aff e a) -> Aff e a
 parAff affs = Aff.sequential $ oneOf $ Aff.parallel <$> affs

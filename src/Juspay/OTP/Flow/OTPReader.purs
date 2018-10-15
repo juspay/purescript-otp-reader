@@ -1,7 +1,7 @@
 module Juspay.OTP.Flow.OTPReader where
 
 import Data.Time.Duration (Milliseconds)
-import Juspay.OTP.OTPReader (OtpRule, ProcessedSms, Result, Sms)
+import Juspay.OTP.OTPReader (OtpRule, Result, Sms)
 import Juspay.OTP.OTPReader as OTP
 import Presto.Core.Types.Language.Flow (Flow, doAff)
 
@@ -11,8 +11,8 @@ getSmsReadPermission = doAff do OTP.getSmsReadPermission
 requestSmsReadPermission :: Flow Boolean
 requestSmsReadPermission = doAff do OTP.requestSmsReadPermission
 
-getOtp :: Array OtpRule -> Number -> Milliseconds -> ProcessedSms -> Flow Result
-getOtp rules startTime pollFrequency processed = doAff do OTP.getOtp rules startTime pollFrequency processed
+getOtp :: Array OtpRule -> Flow Result
+getOtp rules = doAff do OTP.getOtp rules
 
 smsReceiver :: Flow (Array Sms)
 smsReceiver = doAff do OTP.smsReceiver
