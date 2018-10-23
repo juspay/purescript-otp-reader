@@ -2,11 +2,7 @@ module Juspay.OTP.OTPReader (
     OtpRule(..)
   , Sms(..)
   , Result(..)
-  , getSmsReadPermission
-  , requestSmsReadPermission
   , getOtp
-  , smsReceiver
-  , smsPoller
   , extractOtp
   , hashSms
   ) where
@@ -14,20 +10,19 @@ module Juspay.OTP.OTPReader (
 import Prelude
 
 import Control.Monad.Except (runExcept)
-import Data.Array (catMaybes, findMap, length, null, (!!))
-import Data.Either (Either(..), hush)
+import Data.Array (findMap, (!!))
+import Data.Either (Either(..))
 import Data.Foreign (MultipleErrors)
 import Data.Foreign.Class (class Decode, class Encode)
 import Data.Foreign.Generic (decodeJSON, defaultOptions, encodeJSON, genericDecode, genericEncode)
 import Data.Foreign.NullOrUndefined (NullOrUndefined(..), unNullOrUndefined)
 import Data.Generic.Rep (class Generic)
-import Data.Maybe (Maybe(..), fromMaybe, isJust, maybe)
+import Data.Maybe (Maybe(..), fromMaybe, isJust)
 import Data.Newtype (class Newtype, unwrap, wrap)
 import Data.String.Regex (Regex, regex)
 import Data.String.Regex.Flags (ignoreCase)
-import Data.Time.Duration (Milliseconds)
-import Juspay.Compat (id) as Compat -- To prevent shadow definitions warning for `id` from `Prelude`
-import Juspay.Compat (Aff, Eff, delay, liftEff, makeAff, makeAffCanceler, match, throw)
+ -- To prevent shadow definitions warning for `id` from `Prelude`
+import Juspay.Compat (Aff, Eff, makeAffCanceler, match, throw)
 
 -- | Internal type used for encoding from and decoding to `OtpRule`.
 newtype OtpRule' = OtpRule' {
@@ -111,30 +106,12 @@ instance encodeResult :: Encode Result where encode = genericEncode defaultOptio
 instance decodeResult :: Decode Result where decode = genericDecode defaultOptions {unwrapSingleConstructors = true}
 
 
-foreign import getSmsReadPermission' :: forall e. Eff e Boolean
-foreign import requestSmsReadPermission' :: forall e. (Boolean -> Eff e Unit) -> Eff e Unit
-foreign import startSmsReceiver :: forall e. (String -> Eff e Unit) -> Eff e Unit
-foreign import stopSmsReceiver :: forall e. Eff e Unit
 foreign import startSmsRetriever :: forall e. (String -> Eff e Unit) -> Eff e Unit
 foreign import stopSmsRetriever :: forall e. Eff e Unit
-foreign import readSms :: forall e. String -> Eff e String
 foreign import md5Hash :: String -> String
 foreign import trackException :: String -> String -> Unit
 
 
--- | Check if the app has been granted SMS Read permissions.
-getSmsReadPermission :: forall e. Aff e Boolean
-getSmsReadPermission = liftEff $ getSmsReadPermission'
-
-
--- | First check if the app has SMS Read permissions and if not, attempt
--- | to ask the user to grant the app SMS Read permissions. Returns false
--- | if the user declines.
-requestSmsReadPermission :: forall e. Aff e Boolean
-requestSmsReadPermission = do
-  isGranted <- getSmsReadPermission
-  if isGranted then pure true
-    else makeAff requestSmsReadPermission'
 
 -- | Uses the SMS Retriever API to wait for an SMS. When an SMS is retrieved,
 -- | an OTP extraction will be attempted using the given array of OTP rules
@@ -142,7 +119,7 @@ requestSmsReadPermission = do
 -- | another OTP.
 getOtp :: forall e. Array OtpRule -> Aff e Result
 getOtp rules = do
-  sms <- getSms
+  sms <- retrieveSms
   case extractOtp [sms] rules of
     Just result -> pure result
     Nothing -> getOtp rules
@@ -150,43 +127,14 @@ getOtp rules = do
 
 -- | Starts the SMS Retriever API and waits for an SMS. Throws an error if
 -- | if something goes wrong
-getSms :: forall e. Aff e Sms
-getSms = do
+retrieveSms :: forall e. Aff e Sms
+retrieveSms = do
   s <- makeAffCanceler (\cb -> startSmsRetriever cb *> pure stopSmsRetriever)
   case runExcept $ decodeJSON s of
     Right sms -> pure sms
     Left _ -> case s of
-      "TIMEOUT" -> getSms
+      "TIMEOUT" -> retrieveSms
       err -> throw err
-
-
--- | Starts an Android Broadcast Receiver and waits till an SMS received event
--- | triggers. Returns an array of the new SMSs.
-smsReceiver :: forall e. Aff e (Array Sms)
-smsReceiver = do
-  smsString <- makeAffCanceler (\cb -> startSmsReceiver cb *> pure stopSmsReceiver)
-  liftEff $ stopSmsReceiver
-  --TODO track sms receive event
-  let sms = (decodeAndTrack >>> hush >>> maybe [] Compat.id) smsString
-  if length sms < 0
-    then smsReceiver
-    else pure sms
-
-
--- | Given a start time (first argument), this function will poll the SMS
--- | inbox for messages on or after that start time and return them as an
--- | Array. If no SMSs after the given timestamp are found, it will sleep for
--- | the given time interval (second arguemnt) and try again until it finds at
--- | least 1 new SMS.
-smsPoller :: forall e. Number -> Milliseconds -> Aff e (Array Sms)
-smsPoller startTime pollFrequency = do
-  delay pollFrequency
-  smsString <- liftEff $ readSms $ show startTime
-  --TODO track sms receive event
-  let sms = (decodeAndTrack >>> hush >>> maybe [] Compat.id) smsString
-  if length sms < 1
-    then smsPoller startTime pollFrequency
-    else pure sms
 
 
 -- | Given a list of SMSs and a list of OTP rules, it will return the first OTP
@@ -201,16 +149,8 @@ extractOtp sms rules =
 -- | it is present in the given `ProcessedSms` object.
 matchAndExtract :: OtpRule -> Sms -> Maybe Result
 matchAndExtract (OtpRule rule) sms =
-  matchSender sms >>= matchMessage >>= extract
+  matchMessage sms >>= extract
   where
-    matchSender :: Sms -> Maybe Sms
-    matchSender (Sms sms') =
-      let
-        senderRules = catMaybes $ makeRegex <$> rule.matches.sender
-        matches = not null $ catMaybes $ (\r -> match r sms'.from) <$> senderRules
-        fromRetrieverApi = sms'.from == "_RETRIEVED_"
-      in if matches || fromRetrieverApi then Just (Sms sms') else Nothing
-
     matchMessage :: Sms -> Maybe Sms
     matchMessage (Sms sms') =
       let
