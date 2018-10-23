@@ -72,7 +72,6 @@ exports.md5Hash = function (s) {
 
 exports.trackException = function (label) {
   return function(value) {
-    //TODO implment
-    console.log(label + ": " + value)
+    JBridge.trackEvent("dui", "error", "OTPReader_Exception", label + ": " + value)
   }
 };
