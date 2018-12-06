@@ -145,8 +145,7 @@ extractOtp sms rules =
 
 
 -- | Match a given SMS against a given rule and attempt to extract the OTP
--- | from the SMS. Returns `Nothing` if it fails. Ignores the SMS if a hash of
--- | it is present in the given `ProcessedSms` object.
+-- | from the SMS. Returns `Nothing` if it fails.
 matchAndExtract :: OtpRule -> Sms -> Maybe Result
 matchAndExtract (OtpRule rule) sms =
   matchMessage sms >>= extract
