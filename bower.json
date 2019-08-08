@@ -8,11 +8,14 @@
   ],
   "dependencies": {
     "purescript-prelude": "^3.0.0",
-    "purescript-aff": "3.1.0",
+    "purescript-aff": "^4.1.0",
     "purescript-foreign-generic": "^5.0.0",
-    "purescript-presto": "^0.2.3"
+    "purescript-presto": "^0.3.0"
   },
   "devDependencies": {
     "purescript-psci-support": "^3.0.0"
+  },
+  "resolutions": {
+    "purescript-aff": "^4.1.0"
   }
 }
