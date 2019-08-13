@@ -1,6 +1,6 @@
 module Juspay.OTP.OTPReader (
     Sms(..),
-    SmsReader(..),
+    SmsReader,
     smsReceiver,
     smsPoller,
     getSmsReadPermission,
@@ -36,6 +36,7 @@ import Data.String.Regex (Regex, match, regex)
 import Data.String.Regex.Flags (ignoreCase)
 import Data.Time.Duration (Milliseconds(..))
 import Juspay.OTP.Rule (OtpRule(..))
+import Unsafe.Coerce (unsafeCoerce)
 
 
 -- | Type representing an SMS received using `smsReceiver` or `smsPoller`.
@@ -66,11 +67,7 @@ foreign import md5Hash :: String -> String
 foreign import trackException :: String -> String -> Unit
 
 
-newtype SmsReader e = SmsReader {
-  getNextSms :: Aff e (Either Error (Array Sms))
-}
-
-derive instance newtypeSmsReader :: Newtype (SmsReader e) _
+newtype SmsReader = SmsReader (forall e. Aff e (Either Error (Array Sms)))
 
 getSmsReadPermission :: forall e. Eff e Boolean
 getSmsReadPermission = liftEff $ getSmsReadPermission'
@@ -79,10 +76,10 @@ requestSmsReadPermission :: forall e. Aff e Boolean
 requestSmsReadPermission = makeAff (\cb -> requestSmsReadPermission' (Right >>> cb) *> pure nonCanceler)
 
 
-smsReceiver :: forall e. SmsReader e
-smsReceiver = SmsReader { getNextSms }
+smsReceiver :: SmsReader
+smsReceiver = SmsReader getNextSms
   where
-  getNextSms :: Aff e (Either Error (Array Sms))
+  getNextSms :: forall e. Aff e (Either Error (Array Sms))
   getNextSms = do
     smsString <- makeAff (\cb -> startSmsReceiver (Right >>> cb) *> pure (effCanceler stopSmsReceiver))
     let sms = (decodeAndTrack >>> hush >>> maybe [] id) smsString
@@ -91,10 +88,10 @@ smsReceiver = SmsReader { getNextSms }
       else pure $ Right sms
 
 
-smsPoller :: forall e. Milliseconds -> Milliseconds -> Eff e (SmsReader e)
+smsPoller :: forall e. Milliseconds -> Milliseconds -> Eff e SmsReader
 smsPoller startTime frequency = do
   processedRef <- unsafeCoerceEff $ newRef []
-  pure $ SmsReader { getNextSms: getNextSms processedRef }
+  pure $ SmsReader (unsafeCoerceAff $ getNextSms processedRef)
   where
     getNextSms :: Ref (Array String) -> Aff e (Either Error (Array Sms))
     getNextSms processedRef = do
@@ -117,7 +114,7 @@ smsPoller startTime frequency = do
     notProcessed processed sms = not $ elem (hashSms sms) processed
 
 
--- smsRetriever :: forall e. SmsReader e
+-- smsRetriever :: forall e. SmsReader
 -- smsRetriever = SmsReader { getNextSms }
 --   where
 --     getNextSms :: Aff e (Either Error (Array Sms))
@@ -130,12 +127,12 @@ smsPoller startTime frequency = do
 --           err -> pure $ Left (error err)
 
 
-type OtpListener e = {
-  getNextOtp :: Aff e (Either Error String),
-  setOtpRules :: Array OtpRule -> Aff e Unit
+type OtpListener = {
+  getNextOtp :: forall e. Aff e (Either Error String),
+  setOtpRules :: forall e. Array OtpRule -> Aff e Unit
 }
 
-getOtpListener :: forall e. Array (SmsReader e) -> Aff e (OtpListener e)
+getOtpListener :: forall e. Array SmsReader -> Aff e OtpListener
 getOtpListener readers = do
   otpRulesVar <- unsafeCoerceAff makeEmptyVar
   unprocessedSmsVar <- unsafeCoerceAff $ makeVar []
@@ -153,14 +150,17 @@ getOtpListener readers = do
         Left err, _ -> pure $ Left err
         Right s , Nothing -> addToUnprocessed unprocessedSmsVar s *> getNextOtp
         Right s, Just rules -> maybe (getNextOtp) (Right >>> pure) $ extractOtp s rules
-
-  pure { getNextOtp, setOtpRules }
+  -- unsafeCoerce is only used to silence escaped scope issues. Did I mention I really hate effects? (This isn't an issue in purescript v12)
+  unsafeCoerce $ unsafeCoerceAff $ pure {
+    getNextOtp,
+    setOtpRules
+  }
   where
     oneOfAff :: forall f a. (Foldable f) => (Functor f) => f (Aff e a) -> Aff e a
     oneOfAff affs = sequential $ oneOf $ parallel <$> affs
 
-    waitForSms :: Array (SmsReader e) -> Aff e (Either Error (Array Sms))
-    waitForSms readers = oneOfAff $ (unwrap >>> _.getNextSms) <$> readers
+    waitForSms :: Array SmsReader -> Aff e (Either Error (Array Sms))
+    waitForSms readers = oneOfAff $ (\(SmsReader r) -> r) <$> readers
 
     waitForOtpRules :: AVar (Array OtpRule) -> Aff e (Array OtpRule)
     waitForOtpRules otpRulesVar = unsafeCoerceAff $ readVar otpRulesVar

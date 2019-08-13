@@ -1,21 +1,39 @@
-module Juspay.OTP.Flow.OTPReader where
+module Juspay.OTP.Flow.OTPReader (
+    module Juspay.OTP.OTPReader,
+    getSmsReadPermission,
+    requestSmsReadPermission,
+    smsPoller,
+    getOtpListener
+  ) where
 
--- import Data.Time.Duration (Milliseconds)
--- import Juspay.OTP.OTPReader (OtpRule, Result, Sms)
--- import Juspay.OTP.OTPReader as OTP
--- import Presto.Core.Types.Language.Flow (Flow, doAff)
---
--- getSmsReadPermission :: Flow Boolean
--- getSmsReadPermission = doAff do OTP.getSmsReadPermission
---
--- requestSmsReadPermission :: Flow Boolean
--- requestSmsReadPermission = doAff do OTP.requestSmsReadPermission
---
--- getOtp :: Array OtpRule -> Flow Result
--- getOtp rules = doAff do OTP.getOtp rules
---
--- smsReceiver :: Flow (Array Sms)
--- smsReceiver = doAff do OTP.smsReceiver
---
--- smsPoller :: Number -> Milliseconds -> Flow (Array Sms)
--- smsPoller startTime pollFrequency = doAff do OTP.smsPoller startTime pollFrequency
+import Prelude
+
+import Control.Monad.Aff (Aff, Milliseconds)
+import Control.Monad.Aff.Unsafe (unsafeCoerceAff)
+import Control.Monad.Eff (Eff)
+import Control.Monad.Eff.Class (liftEff)
+import Juspay.OTP.OTPReader (Sms(..), SmsReader, OtpListener, smsReceiver, extractOtp)
+import Juspay.OTP.OTPReader as O
+import Presto.Core.Types.Language.Flow (Flow, doAff)
+
+doAff' :: forall e a. Aff e a -> Flow a
+doAff' aff = doAff do unsafeCoerceAff aff
+
+doEff' :: forall e a. Eff e a -> Flow a
+doEff' eff = doAff' $ liftEff eff
+
+
+smsPoller :: Milliseconds -> Milliseconds -> Flow SmsReader
+smsPoller startTime frequency = do
+  doEff' $ O.smsPoller startTime frequency
+
+
+getSmsReadPermission :: Flow Boolean
+getSmsReadPermission = doAff' $ liftEff O.getSmsReadPermission
+
+requestSmsReadPermission :: Flow Boolean
+requestSmsReadPermission = doAff' O.requestSmsReadPermission
+
+
+getOtpListener :: Array SmsReader -> Flow OtpListener
+getOtpListener = doAff' <<< O.getOtpListener

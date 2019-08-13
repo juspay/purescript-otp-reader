@@ -2,7 +2,7 @@ module Test.Main where
 
 import Prelude
 
-import Control.Monad.Aff (Aff, Milliseconds(..), forkAff, launchAff_, runAff_)
+import Control.Monad.Aff (Aff, Milliseconds(Milliseconds), runAff_)
 import Control.Monad.Aff.Console (log, logShow)
 import Control.Monad.Aff.Unsafe (unsafeCoerceAff)
 import Control.Monad.Eff (Eff)
@@ -11,8 +11,8 @@ import Control.Monad.Eff.Console (CONSOLE)
 import Control.Monad.Eff.Console as Console
 import Control.Monad.Eff.Exception (EXCEPTION, error, throwException)
 import Control.Monad.Error.Class (throwError)
-import Data.Either (Either(..), either)
-import Juspay.OTP.OTPReader (OtpListener, getOtpListener, getSmsReadPermission, requestSmsReadPermission, smsPoller, smsReceiver)
+import Data.Either (either)
+import Juspay.OTP.OTPReader (OtpListener, getOtpListener, requestSmsReadPermission, smsPoller)
 import Juspay.OTP.Rule (getGodelOtpRules)
 
 foreign import init :: forall e. Eff e Unit
@@ -31,7 +31,7 @@ main = runAff_ (either (Console.errorShow) pure) do
   waitForOtp otpListener
   pure unit
 
-waitForOtp :: forall e. OtpListener e -> Aff e Unit
+waitForOtp :: forall e. OtpListener-> Aff e Unit
 waitForOtp listener = do
   unsafeCoerceAff $ log "Listening for otp"
   otp <- listener.getNextOtp
