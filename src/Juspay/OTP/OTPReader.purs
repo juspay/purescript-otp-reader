@@ -26,7 +26,7 @@ import Control.Monad.Eff.Ref (Ref, newRef, readRef, writeRef)
 import Control.Monad.Eff.Unsafe (unsafeCoerceEff)
 import Control.Monad.Except (runExcept)
 import Control.Parallel (parallel, sequential)
-import Data.Array (catMaybes, findMap, last, length, null, (!!))
+import Data.Array (catMaybes, findMap, last, length, null, sort, (!!))
 import Data.Either (Either(..), hush)
 import Data.Foldable (class Foldable, oneOf)
 import Data.Foreign (MultipleErrors)
@@ -103,7 +103,7 @@ smsPoller startTime frequency = do
       if length sms < 1
         then getNextSms startTimeRef
         else do
-          let newTime = fromMaybe time $ add (Milliseconds 1.0) <$> (last sms >>= getSmsTime)
+          let newTime = fromMaybe time $ add (Milliseconds 1.0) <$> (last (sort sms) >>= getSmsTime)
           unsafeCoerceAff $ liftEff $ writeRef startTimeRef newTime
           pure $ Right sms
 
