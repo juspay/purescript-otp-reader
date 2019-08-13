@@ -15,22 +15,22 @@ exports["getSmsReadPermission'"] = function () {
   }
 };
 
-exports["requestSmsReadPermission'"] = function(success) {
+exports["requestSmsReadPermission'"] = function(callback) {
   return function() {
     var cb = callbackMapper.map(function(params) {
       var permissions = JSON.parse(params);
       try {
         if(permissions["READ_SMS"] === true && permissions["RECEIVE_SMS"] === true) {
-          success(true)();
+          callback(true)();
         } else {
-          success(false)();
+          callback(false)();
         }
       } catch(e) {
         //TODO track this
-        success(false)();
+        callback(false)();
       }
     });
-    DUIGatekeeper.requestSMSPermission(cb);
+    DUIGatekeeper.requestPermission(["android.permission.READ_SMS", "android.permission.RECEIVE_SMS"], 10, cb);
   }
 }
 
