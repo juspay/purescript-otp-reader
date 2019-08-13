@@ -26,7 +26,7 @@ import Control.Monad.Eff.Ref (Ref, newRef, readRef, writeRef)
 import Control.Monad.Eff.Unsafe (unsafeCoerceEff)
 import Control.Monad.Except (runExcept)
 import Control.Parallel (parallel, sequential)
-import Data.Array (catMaybes, findMap, last, length, null, sort, (!!))
+import Data.Array (catMaybes, elem, filter, findMap, length, null, (!!))
 import Data.Either (Either(..), hush)
 import Data.Foldable (class Foldable, oneOf)
 import Data.Foreign (MultipleErrors)
@@ -91,24 +91,28 @@ smsReceiver = SmsReader { getNextSms }
 
 smsPoller :: forall e. Milliseconds -> Milliseconds -> Eff e (SmsReader e)
 smsPoller startTime frequency = do
-  startTimeRef <- unsafeCoerceEff $ liftEff $ newRef startTime
-  pure $ SmsReader { getNextSms: getNextSms startTimeRef }
+  processedRef <- unsafeCoerceEff $ newRef []
+  pure $ SmsReader { getNextSms: getNextSms processedRef }
   where
-    getNextSms :: Ref Milliseconds -> Aff e (Either Error (Array Sms))
-    getNextSms startTimeRef = do
+    getNextSms :: Ref (Array String) -> Aff e (Either Error (Array Sms))
+    getNextSms processedRef = do
       delay frequency
-      time <- unsafeCoerceAff $ liftEff $ readRef startTimeRef
-      smsString <- liftEff $ readSms $ show (unwrap time)
-      let sms = (decodeAndTrack >>> hush >>> maybe [] id) smsString
+      smsString <- liftEff $ readSms $ show (unwrap startTime)
+      processed <- unsafeCoerceAff $ liftEff $ readRef processedRef
+      let sms = filter (notProcessed processed) $ (decodeAndTrack >>> hush >>> fromMaybe []) smsString
+      unsafeCoerceAff $ liftEff $ writeRef processedRef $ processed <> (hashSms <$> sms)
       if length sms < 1
-        then getNextSms startTimeRef
-        else do
-          let newTime = fromMaybe time $ add (Milliseconds 1.0) <$> (last (sort sms) >>= getSmsTime)
-          unsafeCoerceAff $ liftEff $ writeRef startTimeRef newTime
-          pure $ Right sms
+        then getNextSms processedRef
+        else do pure $ Right sms
 
     getSmsTime :: Sms -> Maybe Milliseconds
     getSmsTime (Sms sms) = Milliseconds <$> fromString sms.time
+
+    hashSms :: Sms -> String
+    hashSms (Sms sms) = md5Hash $ sms.body <> sms.time
+
+    notProcessed :: Array String -> Sms -> Boolean
+    notProcessed processed sms = not $ elem (hashSms sms) processed
 
 
 -- | This code is not final. SMS Retriever native code hasn't been merged to
