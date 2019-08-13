@@ -16,8 +16,11 @@ module Juspay.OTP.OTPReader {-- (
 
 import Prelude
 
+import Control.Monad.Aff (Aff, delay, effCanceler, makeAff, nonCanceler)
 import Control.Monad.Aff.AVar (AVar, isFilled, makeEmptyVar, makeVar, putVar, readVar, status, takeVar, tryReadVar, tryTakeVar)
 import Control.Monad.Aff.Unsafe (unsafeCoerceAff)
+import Control.Monad.Eff (Eff)
+import Control.Monad.Eff.Class (liftEff)
 import Control.Monad.Eff.Exception (Error, error)
 import Control.Monad.Eff.Ref (Ref, newRef, readRef, writeRef)
 import Control.Monad.Eff.Unsafe (unsafeCoerceEff)
@@ -33,11 +36,9 @@ import Data.Generic.Rep (class Generic)
 import Data.Maybe (Maybe(..), fromMaybe, isJust, maybe)
 import Data.Newtype (class Newtype, unwrap)
 import Data.Number (fromString)
-import Data.String.Regex (Regex, regex)
+import Data.String.Regex (Regex, match, regex)
 import Data.String.Regex.Flags (ignoreCase)
 import Data.Time.Duration (Milliseconds(..))
-import Juspay.Compat (Aff, Eff, delay, liftEff, makeAffCanceler, match)
-import Juspay.Compat (id) as Compat
 import Juspay.OTP.Rule (OtpRule(..))
 
 
@@ -73,11 +74,6 @@ newtype SmsReader e = SmsReader {
   getNextSms :: Aff e (Either Error (Array Sms))
 }
 
-type OtpListener e = {
-  getNextOtp :: Aff e (Either Error String),
-  setOtpRules :: Array OtpRule -> Aff e Unit
-}
-
 derive instance newtypeSmsReader :: Newtype (SmsReader e) _
 
 
@@ -86,8 +82,8 @@ smsReceiver = SmsReader { getNextSms }
   where
   getNextSms :: Aff e (Either Error (Array Sms))
   getNextSms = do
-    smsString <- makeAffCanceler (\cb -> startSmsReceiver cb *> pure stopSmsReceiver)
-    let sms = (decodeAndTrack >>> hush >>> maybe [] Compat.id) smsString
+    smsString <- makeAff (\cb -> startSmsReceiver (Right >>> cb) *> pure (effCanceler stopSmsReceiver))
+    let sms = (decodeAndTrack >>> hush >>> maybe [] id) smsString
     if length sms < 1
       then getNextSms
       else pure $ Right sms
@@ -103,7 +99,7 @@ smsPoller startTime frequency = do
       delay frequency
       time <- unsafeCoerceAff $ liftEff $ readRef startTimeRef
       smsString <- liftEff $ readSms $ show (unwrap time)
-      let sms = (decodeAndTrack >>> hush >>> maybe [] Compat.id) smsString
+      let sms = (decodeAndTrack >>> hush >>> maybe [] id) smsString
       if length sms < 1
         then getNextSms startTimeRef
         else do
@@ -122,7 +118,7 @@ smsRetriever = SmsReader { getNextSms }
   where
     getNextSms :: Aff e (Either Error (Array Sms))
     getNextSms = do
-      s <- makeAffCanceler (\cb -> startSmsRetriever cb *> pure stopSmsRetriever)
+      s <- makeAff (\cb -> startSmsRetriever (Right >>> cb) *> pure (effCanceler stopSmsRetriever))
       case runExcept $ decodeJSON s of
         Right sms -> pure $ Right sms
         Left _ -> case s of
@@ -131,8 +127,17 @@ smsRetriever = SmsReader { getNextSms }
 
 
 
-getSmsReadPermission :: forall e. Aff e Boolean
+getSmsReadPermission :: forall e. Eff e Boolean
 getSmsReadPermission = liftEff $ getSmsReadPermission'
+
+requestSmsReadPermission :: forall e. Aff e Boolean
+requestSmsReadPermission = makeAff (\cb -> requestSmsReadPermission' (Right >>> cb) *> pure nonCanceler)
+
+
+type OtpListener e = {
+  getNextOtp :: Aff e (Either Error String),
+  setOtpRules :: Array OtpRule -> Aff e Unit
+}
 
 getOtpListener :: forall e. Array (SmsReader e) -> Aff e (OtpListener e)
 getOtpListener readers = do
