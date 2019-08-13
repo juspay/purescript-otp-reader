@@ -1,18 +1,14 @@
-module Juspay.OTP.OTPReader {-- (
-    OtpRule(..)
-  , Sms(..)
-  , ProcessedSms(..)
-  , Result(..)
-  , noProcessed
-  , getSmsReadPermission
-  , requestSmsReadPermission
-  , getOtp
-  , smsReceiver'
-  , smsPoller'
-  , extractOtp
-  , hashSms
-  , unsafeGetOtp
-  ) --} where
+module Juspay.OTP.OTPReader (
+    Sms(..),
+    SmsReader(..),
+    smsReceiver,
+    smsPoller,
+    getSmsReadPermission,
+    requestSmsReadPermission,
+    OtpListener,
+    getOtpListener,
+    extractOtp
+  ) where
 
 import Prelude
 
@@ -21,7 +17,7 @@ import Control.Monad.Aff.AVar (AVar, isFilled, makeEmptyVar, makeVar, putVar, re
 import Control.Monad.Aff.Unsafe (unsafeCoerceAff)
 import Control.Monad.Eff (Eff)
 import Control.Monad.Eff.Class (liftEff)
-import Control.Monad.Eff.Exception (Error, error)
+import Control.Monad.Eff.Exception (Error)
 import Control.Monad.Eff.Ref (Ref, newRef, readRef, writeRef)
 import Control.Monad.Eff.Unsafe (unsafeCoerceEff)
 import Control.Monad.Except (runExcept)
@@ -63,8 +59,8 @@ foreign import getSmsReadPermission' :: forall e. Eff e Boolean
 foreign import requestSmsReadPermission' :: forall e. (Boolean -> Eff e Unit) -> Eff e Unit
 foreign import startSmsReceiver :: forall e. (String -> Eff e Unit) -> Eff e Unit
 foreign import stopSmsReceiver :: forall e. Eff e Unit
-foreign import startSmsRetriever :: forall e. (String -> Eff e Unit) -> Eff e Unit
-foreign import stopSmsRetriever :: forall e. Eff e Unit
+-- foreign import startSmsRetriever :: forall e. (String -> Eff e Unit) -> Eff e Unit
+-- foreign import stopSmsRetriever :: forall e. Eff e Unit
 foreign import readSms :: forall e. String -> Eff e String
 foreign import md5Hash :: String -> String
 foreign import trackException :: String -> String -> Unit
@@ -75,6 +71,12 @@ newtype SmsReader e = SmsReader {
 }
 
 derive instance newtypeSmsReader :: Newtype (SmsReader e) _
+
+getSmsReadPermission :: forall e. Eff e Boolean
+getSmsReadPermission = liftEff $ getSmsReadPermission'
+
+requestSmsReadPermission :: forall e. Aff e Boolean
+requestSmsReadPermission = makeAff (\cb -> requestSmsReadPermission' (Right >>> cb) *> pure nonCanceler)
 
 
 smsReceiver :: forall e. SmsReader e
@@ -115,27 +117,17 @@ smsPoller startTime frequency = do
     notProcessed processed sms = not $ elem (hashSms sms) processed
 
 
--- | This code is not final. SMS Retriever native code hasn't been merged to
--- | godel-core master as of now. Take care when using it.
-smsRetriever :: forall e. SmsReader e
-smsRetriever = SmsReader { getNextSms }
-  where
-    getNextSms :: Aff e (Either Error (Array Sms))
-    getNextSms = do
-      s <- makeAff (\cb -> startSmsRetriever (Right >>> cb) *> pure (effCanceler stopSmsRetriever))
-      case runExcept $ decodeJSON s of
-        Right sms -> pure $ Right sms
-        Left _ -> case s of
-          "TIMEOUT" -> getNextSms
-          err -> pure $ Left (error err)
-
-
-
-getSmsReadPermission :: forall e. Eff e Boolean
-getSmsReadPermission = liftEff $ getSmsReadPermission'
-
-requestSmsReadPermission :: forall e. Aff e Boolean
-requestSmsReadPermission = makeAff (\cb -> requestSmsReadPermission' (Right >>> cb) *> pure nonCanceler)
+-- smsRetriever :: forall e. SmsReader e
+-- smsRetriever = SmsReader { getNextSms }
+--   where
+--     getNextSms :: Aff e (Either Error (Array Sms))
+--     getNextSms = do
+--       s <- makeAff (\cb -> startSmsRetriever (Right >>> cb) *> pure (effCanceler stopSmsRetriever))
+--       case runExcept $ decodeJSON s of
+--         Right sms -> pure $ Right sms
+--         Left _ -> case s of
+--           "TIMEOUT" -> getNextSms
+--           err -> pure $ Left (error err)
 
 
 type OtpListener e = {
