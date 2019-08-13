@@ -1,4 +1,4 @@
-module Juspay.OTP.Flow.OTPReader (
+module Juspay.OTP.OTPReader.Flow (
     module Juspay.OTP.OTPReader,
     getSmsReadPermission,
     requestSmsReadPermission,
