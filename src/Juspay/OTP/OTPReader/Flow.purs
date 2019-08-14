@@ -8,12 +8,14 @@ module Juspay.OTP.OTPReader.Flow (
 
 import Prelude
 
-import Control.Monad.Aff (Aff, Milliseconds)
+import Control.Monad.Aff (Aff, Error, Milliseconds)
 import Control.Monad.Aff.Unsafe (unsafeCoerceAff)
 import Control.Monad.Eff (Eff)
 import Control.Monad.Eff.Class (liftEff)
-import Juspay.OTP.OTPReader (Sms(..), SmsReader(..), OtpListener, smsReceiver, extractOtp)
+import Data.Either (Either)
+import Juspay.OTP.OTPReader (Sms(..), SmsReader(..), smsReceiver, extractOtp)
 import Juspay.OTP.OTPReader as O
+import Juspay.OTP.Rule (OtpRule)
 import Presto.Core.Types.Language.Flow (Flow, doAff)
 
 doAff' :: forall e a. Aff e a -> Flow a
@@ -42,10 +44,20 @@ getSmsReadPermission = doAff' $ liftEff O.getSmsReadPermission
 requestSmsReadPermission :: Flow Boolean
 requestSmsReadPermission = doAff' O.requestSmsReadPermission
 
+type OtpListener = {
+  getNextOtp :: Flow (Either Error String),
+  setOtpRules :: Array OtpRule -> Flow Unit
+}
+
 -- | Flow version of getSmsReadPermission from Juspay.OTP.OTPReader
 -- | Takes an array of `SmsReader`s and returns functions to get OTPs. It uses the
 -- | supplied `SmsReader`s  by running them in parallel to capture any incoming
 -- | SMSs and attempts to extract an OTP from them using given OTP rules. Check
 -- | the `OtpListener` type for more info on how to get OTPs and set OTP rules.
 getOtpListener :: Array SmsReader -> Flow OtpListener
-getOtpListener = doAff' <<< O.getOtpListener
+getOtpListener readers = do
+  listener <- doAff' $ O.getOtpListener readers
+  pure {
+    getNextOtp: doAff' listener.getNextOtp,
+    setOtpRules: doAff' <<< listener.setOtpRules
+  }
