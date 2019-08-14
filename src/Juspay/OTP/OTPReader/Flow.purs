@@ -13,9 +13,8 @@ import Control.Monad.Aff.Unsafe (unsafeCoerceAff)
 import Control.Monad.Eff (Eff)
 import Control.Monad.Eff.Class (liftEff)
 import Data.Either (Either)
-import Juspay.OTP.OTPReader (Sms(..), SmsReader(..), smsReceiver, extractOtp)
+import Juspay.OTP.OTPReader (OtpRule, Sms(..), SmsReader(..), smsReceiver, extractOtp)
 import Juspay.OTP.OTPReader as O
-import Juspay.OTP.Rule (OtpRule)
 import Presto.Core.Types.Language.Flow (Flow, doAff)
 
 doAff' :: forall e a. Aff e a -> Flow a
