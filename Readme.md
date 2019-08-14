@@ -19,9 +19,9 @@ If you're using SMS Receiver or SMS inbox poller, you need Android SMS permissio
 
 Use `getSmsReadPermission` to check if SMS permission has already been granted or not
 
-Use `requestSmsReadPermission` to ask the user for permission (will return false without asking if SMS permission has not been declared in the app's manifest)
+Use `requestSmsReadPermission` to ask the user for permission.
 
-### The `getOtpListener` function
+### OTP Listener
 
 This is the main function you'll be using to read OTPs
 
@@ -29,9 +29,10 @@ This is the main function you'll be using to read OTPs
 getOtpListener :: Array SmsReader -> Flow OtpListener
 ```
 
-It takes an array of `SmsReader`s which is the type representing different SMS reading methods.
 
-It returns an `OtpListener` which is a type alias for a record containing 2 functions:
+`SmsReader` is a type that represents a method of reading incoming SMSs. For example, `smsReceiver` and `smsPoller` are types of `SmsReader`s (all the available `SmsReader`s are mentioned in the [`Juspay.OTP.Reader` module](docs/Juspay/OTP/Reader.md))
+
+`OtpListener` is a type alias for a record containing 2 functions:
 
 ```purescript
 type OtpListener = {
@@ -54,17 +55,13 @@ You can call `getNextOtp` as many times as you want (inside a loop for example) 
 
 You can either create your own OTP Rules using the `OtpRule` type or you can get the default bank OTP rules used by Godel through the `getGodelOtpRules` function.
 
-The otp rules are decoded from JS so it can throw a decode error. Handle accordingly
-
-```purescript
--- Get OTP rules for ICICI Debit Cards.
-result <- runExcept <$> getGodelOtpRules "ICICIDC"
-case result of
-  Right otpRules -> pure otpRules
-  Left decodeError -> throwError $ "Failed to get OTP rules from Godel: " <> show decodeError
+``` purescript
+getGodelOtpRules :: String -> Flow (F (Array OtpRule))
 ```
 
-Godel's OTP rules are defined in Godel's config.js file under the "otp_rules" field
+The OTP rules are decoded from JS so it can throw a decode error. Handle accordingly
+
+Godel's OTP rules are defined in Godel's [config.js](https://bitbucket.org/juspay/godel-core/src/d4bc77f68b08ab87ae3c55349b6eeeaa4e9094cd/godel/src/main/js/juspay/payments/in.juspay.godel/config.js#lines-355)
 
 ### Example
 
@@ -72,13 +69,23 @@ Godel's OTP rules are defined in Godel's config.js file under the "otp_rules" fi
 import Juspay.OTP.Reader.Flow (getGodelOtpRules, getOtpListener, requestSmsReadPermission, smsReceiver, smsPoller)
 
 waitForHDFCOtp = do
+  -- Request SMS permission. Throw an error if not granted
   granted <- requestSmsReadPermission
   if not granted then throwError "SMS permission not granted" else pure unit
+
+  -- Attempt to get HDFC OTP rules from Godel's config. Throw an error if it fails to decode
   otpRulesF <- runExcept <$> getGodelOtpRules "HDFC"
   otpRules <- either (show >>> throwError) (pure) otpRulesF
-  otpListener <- getOtpListener [smsReceiver, smsPoller]
+
+  -- Get an OTP listener that uses SMS Receiver and SMS Poller
+  currentTime <- getCurrentTime
+  let pollerStartTime = Milliseconds currentTime
+      pollerFrequency = Milliseconds 2000.0
+  poller <- smsPoller pollerStartTime pollerFrequency
+  otpListener <- getOtpListener [smsReceiver, poller]
+
+  -- Set the OTP rules and wait for an OTP
   otpListener.setOtpRules otpRules
-  triggerOtp
   result <- otpListener.getNextOtp -- blocks until an OTP is received
   case result of
     Right otp -> pure otp
