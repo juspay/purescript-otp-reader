@@ -80,19 +80,6 @@ exports.stopSmsReceiver = function () {
   DUIGatekeeper.detach(["SMS_RECEIVE"]);
 };
 
-exports.startSmsRetriever = function (success) {
-  return function() {
-    var cb = callbackMapper.map(function(data) {
-      success(data)();
-    });
-    DUIGatekeeper.attach("SMS_RETRIEVE","{}",cb);
-  }
-};
-
-exports.stopSmsRetriever = function () {
-  DUIGatekeeper.detach(["SMS_RETRIEVE"]);
-};
-
 exports.readSms = function (time) {
   return function() {
     return DUIGatekeeper.fetchFromInbox(time);

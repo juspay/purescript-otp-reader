@@ -253,8 +253,8 @@ getOtpListener readers = do
     getNextOtp = do
       otpRulesSet <- isOtpRulesSet otpRulesVar
       smsList <- if otpRulesSet
-          then waitForSms readers
-          else oneOfAff [waitForSms readers, waitForOtpRules otpRulesVar *> getUnprocessedSms unprocessedSmsVar]
+          then waitForSms
+          else oneOfAff [waitForSms, waitForOtpRules otpRulesVar *> getUnprocessedSms unprocessedSmsVar]
       otpRules <- getOtpRules otpRulesVar
       case smsList, otpRules of
         Left err, _ -> pure $ Left err
@@ -269,8 +269,8 @@ getOtpListener readers = do
     oneOfAff :: forall f a. (Foldable f) => (Functor f) => f (Aff e a) -> Aff e a
     oneOfAff affs = sequential $ oneOf $ parallel <$> affs
 
-    waitForSms :: Array SmsReader -> Aff e (Either Error (Array Sms))
-    waitForSms readers = oneOfAff $ (\(SmsReader r) -> r) <$> readers
+    waitForSms :: Aff e (Either Error (Array Sms))
+    waitForSms = oneOfAff $ (\(SmsReader r) -> r) <$> readers
 
     waitForOtpRules :: AVar (Array OtpRule) -> Aff e (Array OtpRule)
     waitForOtpRules otpRulesVar = unsafeCoerceAff $ readVar otpRulesVar
