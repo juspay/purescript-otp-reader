@@ -13,7 +13,7 @@ import Control.Monad.Eff.Exception (EXCEPTION, error, throwException)
 import Control.Monad.Error.Class (throwError)
 import Data.Either (either)
 import Data.Foreign.Generic (encodeJSON)
-import Juspay.OTP.OTPReader (OtpListener, getGodelOtpRules, getOtpListener, requestSmsReadPermission, smsPoller)
+import Juspay.OTP.Reader (OtpListener, getGodelOtpRules, getOtpListener, requestSmsReadPermission, smsPoller)
 
 foreign import init :: forall e. Eff e Unit
 foreign import getTime :: forall e. Eff e Number

@@ -1,4 +1,4 @@
-module Juspay.OTP.OTPReader (
+module Juspay.OTP.Reader (
     Sms(..),
     OtpRule(..),
     getGodelOtpRules,
