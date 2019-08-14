@@ -1,8 +1,10 @@
 module Juspay.OTP.OTPReader.Flow (
     module Juspay.OTP.OTPReader,
+    getGodelOtpRules,
     getSmsReadPermission,
     requestSmsReadPermission,
     smsPoller,
+    OtpListener,
     getOtpListener
   ) where
 
@@ -14,7 +16,7 @@ import Control.Monad.Eff (Eff)
 import Control.Monad.Eff.Class (liftEff)
 import Data.Either (Either)
 import Data.Foreign (MultipleErrors)
-import Juspay.OTP.OTPReader (OtpRule, Sms(..), SmsReader(..), extractOtp, smsReceiver)
+import Juspay.OTP.OTPReader (OtpRule(..), Sms(..), SmsReader(..), extractOtp, smsReceiver)
 import Juspay.OTP.OTPReader as O
 import Presto.Core.Types.Language.Flow (Flow, doAff)
 
