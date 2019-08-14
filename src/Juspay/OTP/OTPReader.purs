@@ -1,6 +1,6 @@
 module Juspay.OTP.OTPReader (
     Sms(..),
-    SmsReader,
+    SmsReader(..),
     smsReceiver,
     smsPoller,
     getSmsReadPermission,
@@ -22,9 +22,9 @@ import Control.Monad.Eff.Ref (Ref, newRef, readRef, writeRef)
 import Control.Monad.Eff.Unsafe (unsafeCoerceEff)
 import Control.Monad.Except (runExcept)
 import Control.Parallel (parallel, sequential)
-import Data.Array (catMaybes, elem, filter, findMap, length, null, (!!))
+import Data.Array (any, catMaybes, elem, filter, findMap, length, null, (!!))
 import Data.Either (Either(..), hush)
-import Data.Foldable (class Foldable, oneOf)
+import Data.Foldable (class Foldable, and, oneOf)
 import Data.Foreign (MultipleErrors)
 import Data.Foreign.Class (class Decode, class Encode)
 import Data.Foreign.Generic (decodeJSON, defaultOptions, encodeJSON, genericDecode, genericEncode)
@@ -49,6 +49,9 @@ newtype Sms = Sms {
 derive instance eqSms :: Eq Sms
 derive instance newtypeSms :: Newtype Sms _
 derive instance genericSms :: Generic Sms _
+
+-- | Ordered by SMS time. If conversion of the time string to a Number fails,
+-- | regular string ordering is used as a fallback
 instance ordSms :: Ord Sms where
   compare (Sms sms1) (Sms sms2) = fromMaybe (compare sms1.time sms2.time) $
     compare <$> (fromString sms1.time) <*> (fromString sms2.time)
@@ -66,16 +69,21 @@ foreign import readSms :: forall e. String -> Eff e String
 foreign import md5Hash :: String -> String
 foreign import trackException :: String -> String -> Unit
 
-
+-- | This type represents a method of reading incoming SMSs from the OS. If newer
+-- | methods of reading SMSs need to be created, use this type
 newtype SmsReader = SmsReader (forall e. Aff e (Either Error (Array Sms)))
 
+-- | Checks if Android SMS Read permission has been granted
 getSmsReadPermission :: forall e. Eff e Boolean
 getSmsReadPermission = liftEff $ getSmsReadPermission'
 
+-- | Requests Android SMS Read permission from the user
 requestSmsReadPermission :: forall e. Aff e Boolean
 requestSmsReadPermission = makeAff (\cb -> requestSmsReadPermission' (Right >>> cb) *> pure nonCanceler)
 
 
+-- | Capture incoming SMSs by registering a Broadcast Receiver for SMS_RECEIVED
+-- | action. This requires SMS permission to work
 smsReceiver :: SmsReader
 smsReceiver = SmsReader getNextSms
   where
@@ -87,7 +95,11 @@ smsReceiver = SmsReader getNextSms
       then getNextSms
       else pure $ Right sms
 
-
+-- | Capture incoming SMSs by polling the SMS inbox at regular intervals. The
+-- | first argument specifies the earliest time from which SMSs should be read
+-- | (eg: session start time or time just before OTP trigger). The second
+-- | argument specifies the frequency with which the poller should run (suggested
+-- | frequency: 2 seconds)
 smsPoller :: forall e. Milliseconds -> Milliseconds -> Eff e SmsReader
 smsPoller startTime frequency = do
   processedRef <- unsafeCoerceEff $ newRef []
@@ -127,11 +139,28 @@ smsPoller startTime frequency = do
 --           err -> pure $ Left (error err)
 
 
+-- | Return type of `getOtpListener` function.
+-- |
+-- | The `getNextOtp` function blocks until an OTP is received. It uses the list
+-- | of SmsReaders passed to `getOtpListener` to caputre incoming SMSs and
+-- | returns the first one to match an `OtpRule`.
+-- |
+-- | The `setOtpRules` function is used to set the OtpRules that should be used
+-- | for attempting to exctract an OTP from any incoming SMSs.
+-- |
+-- | At first, no OTP rules are set and calling `getNextOtp` will not return any
+-- | OTPs. Instead any incoming SMSs will be queued until `setOtpRules` is called
+-- | for the first time at which point, the queued up SMSs will be validated and
+-- | an OTP returned if any of them match any rule.
 type OtpListener = {
   getNextOtp :: forall e. Aff e (Either Error String),
   setOtpRules :: forall e. Array OtpRule -> Aff e Unit
 }
 
+-- | Takes an array of `SmsReader`s and returns functions to get OTPs. It uses the
+-- | supplied `SmsReader`s  by running them in parallel to capture any incoming
+-- | SMSs and attempts to extract an OTP from them using given OTP rules. Check
+-- | the `OtpListener` type for more info on how to get OTPs and set OTP rules.
 getOtpListener :: forall e. Array SmsReader -> Aff e OtpListener
 getOtpListener readers = do
   otpRulesVar <- unsafeCoerceAff makeEmptyVar
