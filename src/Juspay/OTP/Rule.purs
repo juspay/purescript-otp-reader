@@ -4,14 +4,17 @@ import Prelude
 
 import Control.Monad.Eff (Eff)
 import Control.Monad.Except (runExcept)
+import Data.Array (filterA)
 import Data.Either (Either)
-import Data.Foreign (Foreign, MultipleErrors)
+import Data.Foreign (F, Foreign, MultipleErrors, readString)
 import Data.Foreign.Class (class Decode, class Encode, decode)
 import Data.Foreign.Generic (defaultOptions, genericDecode, genericEncode)
+import Data.Foreign.Index (readProp)
 import Data.Foreign.NullOrUndefined (NullOrUndefined(..), unNullOrUndefined)
 import Data.Generic.Rep (class Generic)
 import Data.Maybe (Maybe)
 import Data.Newtype (class Newtype, unwrap, wrap)
+import Data.Traversable (traverse)
 
 foreign import getGodelOtpRules' :: forall e. Eff e Foreign
 
@@ -71,7 +74,16 @@ instance decodeOtpRule :: Decode OtpRule where
       matches = unwrap r.matches
     }
 
+-- | Gets default OTP rules from Godel's config.
 getGodelOtpRules :: forall e. String -> Eff e (Either MultipleErrors (Array OtpRule))
 getGodelOtpRules bank = do
   f <- getGodelOtpRules'
-  pure $ runExcept $ decode f
+  pure $ runExcept do
+    rules <- decode f
+    bankRules <- filterA (matchesBank) rules
+    traverse decode bankRules
+  where
+    matchesBank :: Foreign -> F Boolean
+    matchesBank f = do
+      b <- readProp "bank" f >>= readString
+      pure $ b == bank

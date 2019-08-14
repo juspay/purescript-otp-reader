@@ -12,6 +12,7 @@ import Control.Monad.Eff.Console as Console
 import Control.Monad.Eff.Exception (EXCEPTION, error, throwException)
 import Control.Monad.Error.Class (throwError)
 import Data.Either (either)
+import Data.Foreign.Generic (encodeJSON)
 import Juspay.OTP.OTPReader (OtpListener, getOtpListener, requestSmsReadPermission, smsPoller)
 import Juspay.OTP.Rule (getGodelOtpRules)
 
@@ -21,7 +22,8 @@ foreign import getTime :: forall e. Eff e Number
 main :: forall e. Eff (console :: CONSOLE, exception :: EXCEPTION | e) Unit
 main = runAff_ (either (Console.errorShow) pure) do
   liftEff init
-  rules <- liftEff $ getGodelOtpRules "" >>= either (show >>> error >>> throwException) (pure)
+  rules <- liftEff $ getGodelOtpRules "ICICICC" >>= either (show >>> error >>> throwException) (pure)
+  log $ encodeJSON rules
   permissionGranted <- requestSmsReadPermission
   if not permissionGranted then throwError (error "No permission") else pure unit
   time <- liftEff getTime
