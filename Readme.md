@@ -29,7 +29,7 @@ _Note: please avoid writing a branch name after the `#`. Use either tags or  com
 
 ### Example code
 
-Example code for detecting OTP can be found [here](test/Main.purs). Read the sections below for details.
+Example code for detecting OTP can be found [here](examples/Main.purs). Read the sections below for details.
 
 ### `Aff` vs `Flow`
 
