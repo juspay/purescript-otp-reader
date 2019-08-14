@@ -7,6 +7,30 @@ Use this library to do any kind of OTP reading. It currently supports the follow
 
 # How to use
 
+### Adding dependency
+
+To add this module as a dependency to your project, add this line to the dependencies section in your `bower.json`
+
+```json
+{
+  "dependencies": {
+    "purescript-otp-reader": "https://bitbucket.org/juspay/purescript-otp-reader.git#<version>"
+  }
+}
+```
+
+Replace `<version>` with the tag of the version you want to use.
+
+To see all versions, go to [commits](https://bitbucket.org/juspay/purescript-otp-reader/commits/) and change the filter to tags.
+
+For every `vX.X` tag there will usually be a tag `vX.X-purs11` which is the same version for PureSctipt 11 in case you need it.
+
+_Note: please avoid writing a branch name after the `#`. Use either tags or  commit hashes_
+
+### Example code
+
+Example code for detecting OTP can be found [here](test/Main.purs). Read the sections below for details.
+
 ### `Aff` vs `Flow`
 
 If you're running in an Aff context, use the functions present in the `Juspay.OTP.Reader` module
@@ -62,10 +86,6 @@ getGodelOtpRules :: String -> Flow (F (Array OtpRule))
 The OTP rules are decoded from JS so it can throw a decode error. Handle accordingly
 
 Godel's OTP rules are defined in Godel's [config.js](https://bitbucket.org/juspay/godel-core/src/d4bc77f68b08ab87ae3c55349b6eeeaa4e9094cd/godel/src/main/js/juspay/payments/in.juspay.godel/config.js#lines-355)
-
-### Example
-
-Example code for detecting OTP can be found [here](test/Main.purs)
 
 ### Module docs
 
