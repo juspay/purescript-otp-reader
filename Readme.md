@@ -65,32 +65,7 @@ Godel's OTP rules are defined in Godel's [config.js](https://bitbucket.org/juspa
 
 ### Example
 
-```purescript
-import Juspay.OTP.Reader.Flow (getGodelOtpRules, getOtpListener, requestSmsReadPermission, smsReceiver, smsPoller)
-
-waitForHDFCOtp = do
-  -- Request SMS permission. Throw an error if not granted
-  granted <- requestSmsReadPermission
-  if not granted then throwError "SMS permission not granted" else pure unit
-
-  -- Attempt to get HDFC OTP rules from Godel's config. Throw an error if it fails to decode
-  otpRulesF <- runExcept <$> getGodelOtpRules "HDFC"
-  otpRules <- either (show >>> throwError) (pure) otpRulesF
-
-  -- Get an OTP listener that uses SMS Receiver and SMS Poller
-  currentTime <- getCurrentTime
-  let pollerStartTime = Milliseconds currentTime
-      pollerFrequency = Milliseconds 2000.0
-  poller <- smsPoller pollerStartTime pollerFrequency
-  otpListener <- getOtpListener [smsReceiver, poller]
-
-  -- Set the OTP rules and wait for an OTP
-  otpListener.setOtpRules otpRules
-  result <- otpListener.getNextOtp -- blocks until an OTP is received
-  case result of
-    Right otp -> pure otp
-    Left err -> throwError err
-```
+Example code for detecting OTP can be found [here](test/Main.purs)
 
 ### Module docs
 
