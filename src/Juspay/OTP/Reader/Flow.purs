@@ -10,21 +10,20 @@ module Juspay.OTP.Reader.Flow (
 
 import Prelude
 
-import Control.Monad.Aff (Aff, Error, Milliseconds)
-import Control.Monad.Aff.Unsafe (unsafeCoerceAff)
-import Control.Monad.Eff (Eff)
-import Control.Monad.Eff.Class (liftEff)
 import Data.Either (Either)
-import Data.Foreign (F)
+import Effect (Effect)
+import Effect.Aff (Aff, Error, Milliseconds)
+import Effect.Class (liftEffect)
+import Foreign (F)
 import Juspay.OTP.Reader (OtpRule(..), Sms(..), SmsReader(..), extractOtp, smsReceiver)
 import Juspay.OTP.Reader as O
 import Presto.Core.Types.Language.Flow (Flow, doAff)
 
-doAff' :: forall e a. Aff e a -> Flow a
-doAff' aff = doAff do unsafeCoerceAff aff
+doAff' :: forall a. Aff a -> Flow a
+doAff' aff = doAff aff
 
-doEff' :: forall e a. Eff e a -> Flow a
-doEff' eff = doAff' $ liftEff eff
+doEff' :: forall a. Effect a -> Flow a
+doEff' eff = doAff' $ liftEffect eff
 
 -- | Flow version of `getGodelOtpRules` from `Juspay.OTP.Reader`
 -- | Gets bank OTP rules from Godel's config.
@@ -44,7 +43,7 @@ smsPoller startTime frequency = do
 -- | Flow version of `getSmsReadPermission` from Juspay.OTP.Reader
 -- | Checks if Android SMS Read permission has been granted
 getSmsReadPermission :: Flow Boolean
-getSmsReadPermission = doAff' $ liftEff O.getSmsReadPermission
+getSmsReadPermission = doAff' $ liftEffect O.getSmsReadPermission
 
 -- | Flow version of `getSmsReadPermission` from Juspay.OTP.Reader
 -- | Requests Android SMS Read permission from the user

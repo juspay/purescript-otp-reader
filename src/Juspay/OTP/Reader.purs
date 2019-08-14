@@ -14,24 +14,12 @@ module Juspay.OTP.Reader (
 
 import Prelude
 
-import Control.Monad.Aff (Aff, delay, effCanceler, makeAff, nonCanceler)
-import Control.Monad.Aff.AVar (AVar, isFilled, makeEmptyVar, makeVar, putVar, readVar, status, takeVar, tryReadVar, tryTakeVar)
-import Control.Monad.Aff.Unsafe (unsafeCoerceAff)
-import Control.Monad.Eff (Eff)
-import Control.Monad.Eff.Class (liftEff)
-import Control.Monad.Eff.Exception (Error)
-import Control.Monad.Eff.Ref (Ref, newRef, readRef, writeRef)
-import Control.Monad.Eff.Unsafe (unsafeCoerceEff)
 import Control.Monad.Except (runExcept)
 import Control.Parallel (parallel, sequential)
-import Data.Array (catMaybes, elem, filter, filterA, findMap, length, null, (!!))
+import Data.Array (catMaybes, elem, filter, filterA, findMap, length, null)
+import Data.Array.NonEmpty ((!!))
 import Data.Either (Either(..), hush)
 import Data.Foldable (class Foldable, oneOf)
-import Data.Foreign (F, Foreign, MultipleErrors, readString)
-import Data.Foreign.Class (class Decode, class Encode, decode)
-import Data.Foreign.Generic (decodeJSON, defaultOptions, encodeJSON, genericDecode, genericEncode)
-import Data.Foreign.Index (readProp)
-import Data.Foreign.NullOrUndefined (NullOrUndefined(..), unNullOrUndefined)
 import Data.Generic.Rep (class Generic)
 import Data.Maybe (Maybe(..), fromMaybe, isJust, maybe)
 import Data.Newtype (class Newtype, unwrap, wrap)
@@ -40,7 +28,18 @@ import Data.String.Regex (Regex, match, regex)
 import Data.String.Regex.Flags (ignoreCase)
 import Data.Time.Duration (Milliseconds(..))
 import Data.Traversable (traverse)
-import Unsafe.Coerce (unsafeCoerce)
+import Effect (Effect)
+import Effect.Aff (Aff, delay, effectCanceler, makeAff, nonCanceler)
+import Effect.Aff.AVar (AVar)
+import Effect.Aff.AVar as AVar
+import Effect.Class (liftEffect)
+import Effect.Exception (Error)
+import Effect.Ref (Ref)
+import Effect.Ref as Ref
+import Foreign (F, Foreign, MultipleErrors, readString)
+import Foreign.Class (class Decode, class Encode, decode)
+import Foreign.Generic (decodeJSON, defaultOptions, encodeJSON, genericDecode, genericEncode)
+import Foreign.Index (readProp)
 
 
 -- | Type representing an SMS received using any `SmsReader`s.
@@ -68,7 +67,7 @@ instance decodeSms :: Decode Sms where decode = genericDecode defaultOptions {un
 newtype OtpRule' = OtpRule' {
   matches :: Matches,
   otp :: String,
-  group :: NullOrUndefined Int
+  group :: Maybe Int
 }
 
 derive instance newtypeOtpRule' :: Newtype OtpRule' _
@@ -111,23 +110,23 @@ derive instance genericOtpRule :: Generic OtpRule _
 instance encodeOtpRule :: Encode OtpRule where
   encode (OtpRule r) = genericEncode defaultOptions {unwrapSingleConstructors = true}
     (OtpRule' r{
-      group = NullOrUndefined r.group,
+      group = r.group,
       matches = wrap r.matches
     })
 instance decodeOtpRule :: Decode OtpRule where
   decode f = do
     (OtpRule' r) <- genericDecode defaultOptions{unwrapSingleConstructors = true} f
     pure $ OtpRule r{
-      group = unNullOrUndefined r.group,
+      group = r.group,
       matches = unwrap r.matches
     }
 
 
 
-foreign import getGodelOtpRules' :: forall e. Eff e Foreign
+foreign import getGodelOtpRules' :: Effect Foreign
 
 -- | Gets bank OTP rules from Godel's config.
-getGodelOtpRules :: forall e. String -> Eff e (F (Array OtpRule))
+getGodelOtpRules :: String -> Effect (F (Array OtpRule))
 getGodelOtpRules bank = do
   f <- getGodelOtpRules'
   pure $ do
@@ -145,45 +144,45 @@ getGodelOtpRules bank = do
 
 -- | This type represents a method of reading incoming SMSs from the OS. If newer
 -- | methods of reading SMSs need to be created, use this type
-newtype SmsReader = SmsReader (forall e. Aff e (Either Error (Array Sms)))
+newtype SmsReader = SmsReader (Aff (Either Error (Array Sms)))
 
 
 
-foreign import getSmsReadPermission' :: forall e. Eff e Boolean
+foreign import getSmsReadPermission' :: Effect Boolean
 
 -- | Checks if Android SMS Read permission has been granted
-getSmsReadPermission :: forall e. Eff e Boolean
-getSmsReadPermission = liftEff $ getSmsReadPermission'
+getSmsReadPermission :: Effect Boolean
+getSmsReadPermission = liftEffect $ getSmsReadPermission'
 
 
 
-foreign import requestSmsReadPermission' :: forall e. (Boolean -> Eff e Unit) -> Eff e Unit
+foreign import requestSmsReadPermission' :: (Boolean -> Effect Unit) -> Effect Unit
 
 -- | Requests Android SMS Read permission from the user
-requestSmsReadPermission :: forall e. Aff e Boolean
+requestSmsReadPermission :: Aff Boolean
 requestSmsReadPermission = makeAff (\cb -> requestSmsReadPermission' (Right >>> cb) *> pure nonCanceler)
 
 
 
-foreign import startSmsReceiver :: forall e. (String -> Eff e Unit) -> Eff e Unit
-foreign import stopSmsReceiver :: forall e. Eff e Unit
+foreign import startSmsReceiver :: (String -> Effect Unit) -> Effect Unit
+foreign import stopSmsReceiver :: Effect Unit
 
 -- | Capture incoming SMSs by registering an Android Broadcast Receiver for
 -- | SMS_RECEIVED action. This requires SMS permission to work
 smsReceiver :: SmsReader
 smsReceiver = SmsReader getNextSms
   where
-  getNextSms :: forall e. Aff e (Either Error (Array Sms))
+  getNextSms :: Aff (Either Error (Array Sms))
   getNextSms = do
-    smsString <- makeAff (\cb -> startSmsReceiver (Right >>> cb) *> pure (effCanceler stopSmsReceiver))
-    let sms = (decodeAndTrack >>> hush >>> maybe [] id) smsString
+    smsString <- makeAff (\cb -> startSmsReceiver (Right >>> cb) *> pure (effectCanceler stopSmsReceiver))
+    let sms = (decodeAndTrack >>> hush >>> maybe [] identity) smsString
     if length sms < 1
       then getNextSms
       else pure $ Right sms
 
 
 
-foreign import readSms :: forall e. String -> Eff e String
+foreign import readSms :: String -> Effect String
 foreign import md5Hash :: String -> String
 
 -- | Capture incoming SMSs by polling the SMS inbox at regular intervals. The
@@ -191,18 +190,18 @@ foreign import md5Hash :: String -> String
 -- | (eg: session start time or time just before OTP trigger). The second
 -- | argument specifies the frequency with which the poller should run (suggested
 -- | frequency: 2 seconds). This requires SMS permission to work
-smsPoller :: forall e. Milliseconds -> Milliseconds -> Eff e SmsReader
+smsPoller :: Milliseconds -> Milliseconds -> Effect SmsReader
 smsPoller startTime frequency = do
-  processedRef <- unsafeCoerceEff $ newRef []
-  pure $ SmsReader (unsafeCoerceAff $ getNextSms processedRef)
+  processedRef <- Ref.new []
+  pure $ SmsReader $ getNextSms processedRef
   where
-    getNextSms :: Ref (Array String) -> Aff e (Either Error (Array Sms))
+    getNextSms :: Ref (Array String) -> Aff (Either Error (Array Sms))
     getNextSms processedRef = do
       delay frequency
-      smsString <- liftEff $ readSms $ show (unwrap startTime)
-      processed <- unsafeCoerceAff $ liftEff $ readRef processedRef
+      smsString <- liftEffect $ readSms $ show (unwrap startTime)
+      processed <- liftEffect $ Ref.read processedRef
       let sms = filter (notProcessed processed) $ (decodeAndTrack >>> hush >>> fromMaybe []) smsString
-      unsafeCoerceAff $ liftEff $ writeRef processedRef $ processed <> (hashSms <$> sms)
+      liftEffect $ Ref.write (processed <> (hashSms <$> sms)) processedRef
       if length sms < 1
         then getNextSms processedRef
         else do pure $ Right sms
@@ -232,8 +231,8 @@ smsPoller startTime frequency = do
 -- | for the first time at which point, the queued up SMSs will be validated and
 -- | an OTP returned if any of them match any rule.
 type OtpListener = {
-  getNextOtp :: forall e. Aff e (Either Error String),
-  setOtpRules :: forall e. Array OtpRule -> Aff e Unit
+  getNextOtp :: Aff (Either Error String),
+  setOtpRules :: Array OtpRule -> Aff Unit
 }
 
 
@@ -242,13 +241,13 @@ type OtpListener = {
 -- | supplied `SmsReader`s  by running them in parallel to capture any incoming
 -- | SMSs and attempts to extract an OTP from them using given OTP rules. Check
 -- | the `OtpListener` type for more info on how to get OTPs and set OTP rules.
-getOtpListener :: forall e. Array SmsReader -> Aff e OtpListener
+getOtpListener :: Array SmsReader -> Aff OtpListener
 getOtpListener readers = do
-  otpRulesVar <- unsafeCoerceAff makeEmptyVar
-  unprocessedSmsVar <- unsafeCoerceAff $ makeVar []
+  otpRulesVar <- AVar.empty
+  unprocessedSmsVar <- AVar.new []
 
   let
-    setOtpRules rules = unsafeCoerceAff $ tryTakeVar otpRulesVar *> putVar rules otpRulesVar
+    setOtpRules rules = AVar.tryTake otpRulesVar *> AVar.put rules otpRulesVar
 
     getNextOtp = do
       otpRulesSet <- isOtpRulesSet otpRulesVar
@@ -260,34 +259,33 @@ getOtpListener readers = do
         Left err, _ -> pure $ Left err
         Right s , Nothing -> addToUnprocessed unprocessedSmsVar s *> getNextOtp
         Right s, Just rules -> maybe (getNextOtp) (Right >>> pure) $ extractOtp s rules
-  -- unsafeCoerce is only used to silence escaped scope issues. Did I mention I really hate effects? (This isn't an issue in purescript v12)
-  unsafeCoerce $ unsafeCoerceAff $ pure {
+  pure {
     getNextOtp,
     setOtpRules
   }
   where
-    oneOfAff :: forall f a. (Foldable f) => (Functor f) => f (Aff e a) -> Aff e a
+    oneOfAff :: forall f a. (Foldable f) => (Functor f) => f (Aff a) -> Aff a
     oneOfAff affs = sequential $ oneOf $ parallel <$> affs
 
-    waitForSms :: Aff e (Either Error (Array Sms))
+    waitForSms :: Aff (Either Error (Array Sms))
     waitForSms = oneOfAff $ (\(SmsReader r) -> r) <$> readers
 
-    waitForOtpRules :: AVar (Array OtpRule) -> Aff e (Array OtpRule)
-    waitForOtpRules otpRulesVar = unsafeCoerceAff $ readVar otpRulesVar
+    waitForOtpRules :: AVar (Array OtpRule) -> Aff (Array OtpRule)
+    waitForOtpRules otpRulesVar = AVar.read otpRulesVar
 
-    getOtpRules :: AVar (Array OtpRule) -> Aff e (Maybe (Array OtpRule))
-    getOtpRules otpRulesVar = unsafeCoerceAff $ tryReadVar otpRulesVar
+    getOtpRules :: AVar (Array OtpRule) -> Aff (Maybe (Array OtpRule))
+    getOtpRules otpRulesVar = AVar.tryRead otpRulesVar
 
-    getUnprocessedSms :: AVar (Array Sms) -> Aff e (Either Error (Array Sms))
-    getUnprocessedSms unprocessedSmsVar = unsafeCoerceAff $ Right <$> readVar unprocessedSmsVar
+    getUnprocessedSms :: AVar (Array Sms) -> Aff (Either Error (Array Sms))
+    getUnprocessedSms unprocessedSmsVar = Right <$> AVar.read unprocessedSmsVar
 
-    isOtpRulesSet :: AVar (Array OtpRule) -> Aff e Boolean
-    isOtpRulesSet otpRulesVar = unsafeCoerceAff $ isFilled <$> status otpRulesVar
+    isOtpRulesSet :: AVar (Array OtpRule) -> Aff Boolean
+    isOtpRulesSet otpRulesVar = AVar.isFilled <$> AVar.status otpRulesVar
 
-    addToUnprocessed :: AVar (Array Sms) -> Array Sms -> Aff e Unit
-    addToUnprocessed unprocessedSmsVar sms = unsafeCoerceAff do
-      unprocessed <- takeVar unprocessedSmsVar
-      putVar (unprocessed <> sms) unprocessedSmsVar
+    addToUnprocessed :: AVar (Array Sms) -> Array Sms -> Aff Unit
+    addToUnprocessed unprocessedSmsVar sms = do
+      unprocessed <- AVar.take unprocessedSmsVar
+      AVar.put (unprocessed <> sms) unprocessedSmsVar
 
 
 
