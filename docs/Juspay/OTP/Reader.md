@@ -7,7 +7,7 @@ newtype Sms
   = Sms { from :: String, body :: String, time :: String }
 ```
 
-Type representing an SMS received using `smsReceiver` or `smsPoller`.
+Type representing an SMS received using any `SmsReader`s.
 
 ##### Instances
 ``` purescript

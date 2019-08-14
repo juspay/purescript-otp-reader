@@ -43,7 +43,7 @@ import Data.Traversable (traverse)
 import Unsafe.Coerce (unsafeCoerce)
 
 
--- | Type representing an SMS received using `smsReceiver` or `smsPoller`.
+-- | Type representing an SMS received using any `SmsReader`s.
 newtype Sms = Sms {
   from :: String,
   body :: String,
