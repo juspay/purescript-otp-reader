@@ -84,3 +84,7 @@ waitForHDFCOtp = do
     Right otp -> pure otp
     Left err -> throwError err
 ```
+
+### Module docs
+
+Module docs are [here](docs/)
