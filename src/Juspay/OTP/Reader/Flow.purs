@@ -15,7 +15,7 @@ import Control.Monad.Aff.Unsafe (unsafeCoerceAff)
 import Control.Monad.Eff (Eff)
 import Control.Monad.Eff.Class (liftEff)
 import Data.Either (Either)
-import Data.Foreign (MultipleErrors)
+import Data.Foreign (F)
 import Juspay.OTP.Reader (OtpRule(..), Sms(..), SmsReader(..), extractOtp, smsReceiver)
 import Juspay.OTP.Reader as O
 import Presto.Core.Types.Language.Flow (Flow, doAff)
@@ -28,7 +28,7 @@ doEff' eff = doAff' $ liftEff eff
 
 -- | Flow version of `getGodelOtpRules` from `Juspay.OTP.Reader`
 -- | Gets bank OTP rules from Godel's config.
-getGodelOtpRules :: String -> Flow (Either MultipleErrors (Array OtpRule))
+getGodelOtpRules :: String -> Flow (F (Array OtpRule))
 getGodelOtpRules = doEff' <<< O.getGodelOtpRules
 
 -- | Flow version of smsPoller from Juspay.OTP.Reader

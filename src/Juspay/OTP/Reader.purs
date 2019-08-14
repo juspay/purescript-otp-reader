@@ -127,10 +127,10 @@ instance decodeOtpRule :: Decode OtpRule where
 foreign import getGodelOtpRules' :: forall e. Eff e Foreign
 
 -- | Gets bank OTP rules from Godel's config.
-getGodelOtpRules :: forall e. String -> Eff e (Either MultipleErrors (Array OtpRule))
+getGodelOtpRules :: forall e. String -> Eff e (F (Array OtpRule))
 getGodelOtpRules bank = do
   f <- getGodelOtpRules'
-  pure $ runExcept do
+  pure $ do
     rules <- decode f
     bankRules <- filterA (matchesBank) rules
     traverse decode bankRules
