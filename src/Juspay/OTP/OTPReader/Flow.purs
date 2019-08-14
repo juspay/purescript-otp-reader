@@ -13,7 +13,8 @@ import Control.Monad.Aff.Unsafe (unsafeCoerceAff)
 import Control.Monad.Eff (Eff)
 import Control.Monad.Eff.Class (liftEff)
 import Data.Either (Either)
-import Juspay.OTP.OTPReader (OtpRule, Sms(..), SmsReader(..), smsReceiver, extractOtp)
+import Data.Foreign (MultipleErrors)
+import Juspay.OTP.OTPReader (OtpRule, Sms(..), SmsReader(..), extractOtp, smsReceiver)
 import Juspay.OTP.OTPReader as O
 import Presto.Core.Types.Language.Flow (Flow, doAff)
 
@@ -22,6 +23,11 @@ doAff' aff = doAff do unsafeCoerceAff aff
 
 doEff' :: forall e a. Eff e a -> Flow a
 doEff' eff = doAff' $ liftEff eff
+
+-- | Flow version of `getGodelOtpRules` from `Juspay.OTP.OTPReader`
+-- | Gets bank OTP rules from Godel's config.
+getGodelOtpRules :: String -> Flow (Either MultipleErrors (Array OtpRule))
+getGodelOtpRules = doEff' <<< O.getGodelOtpRules
 
 -- | Flow version of smsPoller from Juspay.OTP.OTPReader
 -- | Capture incoming SMSs by polling the SMS inbox at regular intervals. The
@@ -33,12 +39,12 @@ smsPoller :: Milliseconds -> Milliseconds -> Flow SmsReader
 smsPoller startTime frequency = do
   doEff' $ O.smsPoller startTime frequency
 
--- | Flow version of getSmsReadPermission from Juspay.OTP.OTPReader
+-- | Flow version of `getSmsReadPermission` from Juspay.OTP.OTPReader
 -- | Checks if Android SMS Read permission has been granted
 getSmsReadPermission :: Flow Boolean
 getSmsReadPermission = doAff' $ liftEff O.getSmsReadPermission
 
--- | Flow version of getSmsReadPermission from Juspay.OTP.OTPReader
+-- | Flow version of `getSmsReadPermission` from Juspay.OTP.OTPReader
 -- | Requests Android SMS Read permission from the user
 requestSmsReadPermission :: Flow Boolean
 requestSmsReadPermission = doAff' O.requestSmsReadPermission
@@ -48,7 +54,7 @@ type OtpListener = {
   setOtpRules :: Array OtpRule -> Flow Unit
 }
 
--- | Flow version of getSmsReadPermission from Juspay.OTP.OTPReader
+-- | Flow version of `getSmsReadPermission` from Juspay.OTP.OTPReader
 -- | Takes an array of `SmsReader`s and returns functions to get OTPs. It uses the
 -- | supplied `SmsReader`s  by running them in parallel to capture any incoming
 -- | SMSs and attempts to extract an OTP from them using given OTP rules. Check

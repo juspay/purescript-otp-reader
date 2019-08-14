@@ -126,7 +126,7 @@ instance decodeOtpRule :: Decode OtpRule where
 
 foreign import getGodelOtpRules' :: forall e. Eff e Foreign
 
--- | Gets default OTP rules from Godel's config.
+-- | Gets bank OTP rules from Godel's config.
 getGodelOtpRules :: forall e. String -> Eff e (Either MultipleErrors (Array OtpRule))
 getGodelOtpRules bank = do
   f <- getGodelOtpRules'
