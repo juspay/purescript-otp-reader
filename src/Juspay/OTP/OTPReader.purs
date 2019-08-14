@@ -62,6 +62,8 @@ instance ordSms :: Ord Sms where
 instance encodeSms :: Encode Sms where encode = genericEncode defaultOptions {unwrapSingleConstructors = true}
 instance decodeSms :: Decode Sms where decode = genericDecode defaultOptions {unwrapSingleConstructors = true}
 
+
+
 -- | Internal type used for encoding from and decoding to `OtpRule`.
 newtype OtpRule' = OtpRule' {
   matches :: Matches,
@@ -82,6 +84,8 @@ derive instance newtypeMatches :: Newtype Matches _
 derive instance genericMatches :: Generic Matches _
 instance encodeMatches :: Encode Matches where encode = genericEncode defaultOptions {unwrapSingleConstructors = true}
 instance decodeMatches :: Decode Matches where decode = genericDecode defaultOptions {unwrapSingleConstructors = true}
+
+
 
 
 -- | Represents a rule for matching and extracting an OTP. An SMS will
@@ -118,6 +122,10 @@ instance decodeOtpRule :: Decode OtpRule where
       matches = unwrap r.matches
     }
 
+
+
+foreign import getGodelOtpRules' :: forall e. Eff e Foreign
+
 -- | Gets default OTP rules from Godel's config.
 getGodelOtpRules :: forall e. String -> Eff e (Either MultipleErrors (Array OtpRule))
 getGodelOtpRules bank = do
@@ -132,29 +140,33 @@ getGodelOtpRules bank = do
       b <- readProp "bank" f >>= readString
       pure $ b == bank
 
-foreign import getGodelOtpRules' :: forall e. Eff e Foreign
-foreign import getSmsReadPermission' :: forall e. Eff e Boolean
-foreign import requestSmsReadPermission' :: forall e. (Boolean -> Eff e Unit) -> Eff e Unit
-foreign import startSmsReceiver :: forall e. (String -> Eff e Unit) -> Eff e Unit
-foreign import stopSmsReceiver :: forall e. Eff e Unit
--- foreign import startSmsRetriever :: forall e. (String -> Eff e Unit) -> Eff e Unit
--- foreign import stopSmsRetriever :: forall e. Eff e Unit
-foreign import readSms :: forall e. String -> Eff e String
-foreign import md5Hash :: String -> String
-foreign import trackException :: String -> String -> Unit
+
+
 
 -- | This type represents a method of reading incoming SMSs from the OS. If newer
 -- | methods of reading SMSs need to be created, use this type
 newtype SmsReader = SmsReader (forall e. Aff e (Either Error (Array Sms)))
 
+
+
+foreign import getSmsReadPermission' :: forall e. Eff e Boolean
+
 -- | Checks if Android SMS Read permission has been granted
 getSmsReadPermission :: forall e. Eff e Boolean
 getSmsReadPermission = liftEff $ getSmsReadPermission'
+
+
+
+foreign import requestSmsReadPermission' :: forall e. (Boolean -> Eff e Unit) -> Eff e Unit
 
 -- | Requests Android SMS Read permission from the user
 requestSmsReadPermission :: forall e. Aff e Boolean
 requestSmsReadPermission = makeAff (\cb -> requestSmsReadPermission' (Right >>> cb) *> pure nonCanceler)
 
+
+
+foreign import startSmsReceiver :: forall e. (String -> Eff e Unit) -> Eff e Unit
+foreign import stopSmsReceiver :: forall e. Eff e Unit
 
 -- | Capture incoming SMSs by registering an Android Broadcast Receiver for
 -- | SMS_RECEIVED action. This requires SMS permission to work
@@ -168,6 +180,11 @@ smsReceiver = SmsReader getNextSms
     if length sms < 1
       then getNextSms
       else pure $ Right sms
+
+
+
+foreign import readSms :: forall e. String -> Eff e String
+foreign import md5Hash :: String -> String
 
 -- | Capture incoming SMSs by polling the SMS inbox at regular intervals. The
 -- | first argument specifies the earliest time from which SMSs should be read
@@ -200,18 +217,6 @@ smsPoller startTime frequency = do
     notProcessed processed sms = not $ elem (hashSms sms) processed
 
 
--- smsRetriever :: forall e. SmsReader
--- smsRetriever = SmsReader { getNextSms }
---   where
---     getNextSms :: Aff e (Either Error (Array Sms))
---     getNextSms = do
---       s <- makeAff (\cb -> startSmsRetriever (Right >>> cb) *> pure (effCanceler stopSmsRetriever))
---       case runExcept $ decodeJSON s of
---         Right sms -> pure $ Right sms
---         Left _ -> case s of
---           "TIMEOUT" -> getNextSms
---           err -> pure $ Left (error err)
-
 
 -- | Return type of `getOtpListener` function.
 -- |
@@ -230,6 +235,8 @@ type OtpListener = {
   getNextOtp :: forall e. Aff e (Either Error String),
   setOtpRules :: forall e. Array OtpRule -> Aff e Unit
 }
+
+
 
 -- | Takes an array of `SmsReader`s and returns functions to get OTPs. It uses the
 -- | supplied `SmsReader`s  by running them in parallel to capture any incoming
@@ -283,11 +290,13 @@ getOtpListener readers = do
       putVar (unprocessed <> sms) unprocessedSmsVar
 
 
+
 -- | Given a list of SMSs and a list of OTP rules, it will return the first OTP
 -- | that matches one of the given rules or `Nothing` if none of them match.
 extractOtp :: Array Sms -> Array OtpRule -> Maybe String
 extractOtp sms rules =
   findMap (\rule -> findMap (matchAndExtract rule) sms) rules
+
 
 
 -- | Match a given SMS against a given rule and attempt to extract the OTP
@@ -323,6 +332,9 @@ matchAndExtract (OtpRule rule) sms =
       Right r -> Just r
       Left err -> let _ = trackException "otp_reader" ("Regex syntax error \"" <> err <> "\" for rule: " <> encodeJSON (OtpRule rule)) in Nothing
 
+
+
+foreign import trackException :: String -> String -> Unit
 
 -- | Used for tracking decode errors for values that should never have failed
 -- | a decode (such as `Sms` values retreived from Android or `OtpRule`s)
