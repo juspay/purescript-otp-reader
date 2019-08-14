@@ -82,8 +82,8 @@ requestSmsReadPermission :: forall e. Aff e Boolean
 requestSmsReadPermission = makeAff (\cb -> requestSmsReadPermission' (Right >>> cb) *> pure nonCanceler)
 
 
--- | Capture incoming SMSs by registering a Broadcast Receiver for SMS_RECEIVED
--- | action. This requires SMS permission to work
+-- | Capture incoming SMSs by registering an Android Broadcast Receiver for
+-- | SMS_RECEIVED action. This requires SMS permission to work
 smsReceiver :: SmsReader
 smsReceiver = SmsReader getNextSms
   where
@@ -99,7 +99,7 @@ smsReceiver = SmsReader getNextSms
 -- | first argument specifies the earliest time from which SMSs should be read
 -- | (eg: session start time or time just before OTP trigger). The second
 -- | argument specifies the frequency with which the poller should run (suggested
--- | frequency: 2 seconds)
+-- | frequency: 2 seconds). This requires SMS permission to work
 smsPoller :: forall e. Milliseconds -> Milliseconds -> Eff e SmsReader
 smsPoller startTime frequency = do
   processedRef <- unsafeCoerceEff $ newRef []
@@ -142,7 +142,7 @@ smsPoller startTime frequency = do
 -- | Return type of `getOtpListener` function.
 -- |
 -- | The `getNextOtp` function blocks until an OTP is received. It uses the list
--- | of SmsReaders passed to `getOtpListener` to caputre incoming SMSs and
+-- | of `SmsReader`s passed to `getOtpListener` to caputre incoming SMSs and
 -- | returns the first one to match an `OtpRule`.
 -- |
 -- | The `setOtpRules` function is used to set the OtpRules that should be used

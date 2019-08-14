@@ -27,7 +27,7 @@ doEff' eff = doAff' $ liftEff eff
 -- | first argument specifies the earliest time from which SMSs should be read
 -- | (eg: session start time or time just before OTP trigger). The second
 -- | argument specifies the frequency with which the poller should run (suggested
--- | frequency: 2 seconds)
+-- | frequency: 2 seconds). This requires SMS permission to work
 smsPoller :: Milliseconds -> Milliseconds -> Flow SmsReader
 smsPoller startTime frequency = do
   doEff' $ O.smsPoller startTime frequency
