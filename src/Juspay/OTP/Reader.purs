@@ -3,11 +3,14 @@ module Juspay.OTP.Reader (
     OtpRule(..),
     getGodelOtpRules,
     SmsReader(..),
+    getName,
     smsReceiver,
     smsPoller,
     clipboard,
     getSmsReadPermission,
     requestSmsReadPermission,
+    Otp(..),
+    OtpError(..),
     OtpListener,
     getOtpListener,
     extractOtp
@@ -16,10 +19,12 @@ module Juspay.OTP.Reader (
 import Prelude
 
 import Control.Monad.Except (runExcept)
+import Control.Monad.Except.Trans (ExceptT(..), runExceptT)
+import Control.Monad.Trans.Class (lift)
 import Control.Parallel (parallel, sequential)
 import Data.Array (catMaybes, elem, filter, filterA, findMap, length, null)
 import Data.Array.NonEmpty ((!!))
-import Data.Either (Either(..), hush)
+import Data.Either (Either(..), either, hush)
 import Data.Foldable (class Foldable, oneOf)
 import Data.Generic.Rep (class Generic)
 import Data.Maybe (Maybe(..), fromMaybe, isJust, maybe)
@@ -144,9 +149,15 @@ getGodelOtpRules bank = do
 
 
 -- | This type represents a method of reading incoming SMSs from the OS. If newer
--- | methods of reading SMSs need to be created, use this type
-newtype SmsReader = SmsReader (Aff (Either Error (Array Sms)))
+-- | methods of reading SMSs need to be created, use this type.
+-- | The first parameter is the name of the SMS Reader as a String (useful for
+-- | differentiating between SmsReaders`s). The second argument is the function
+-- | to be used to wait for the next SMS.
+data SmsReader = SmsReader String (Aff (Either Error (Array Sms)))
 
+-- | Get the name of an `SmsReader`. Useful for differentiating between `SmsReader`s
+getName :: SmsReader -> String
+getName (SmsReader name _) = name
 
 
 foreign import getSmsReadPermission' :: Effect Boolean
@@ -169,9 +180,10 @@ foreign import startSmsReceiver :: (String -> Effect Unit) -> Effect Unit
 foreign import stopSmsReceiver :: Effect Unit
 
 -- | Capture incoming SMSs by registering an Android Broadcast Receiver for
--- | SMS_RECEIVED action. This requires SMS permission to work
+-- | SMS_RECEIVED action. This requires SMS permission to work.
+-- | Calling `getName` on this will return the string "SMS_RECEIVER".
 smsReceiver :: SmsReader
-smsReceiver = SmsReader getNextSms
+smsReceiver = SmsReader "SMS_RECEIVER" getNextSms
   where
   getNextSms :: Aff (Either Error (Array Sms))
   getNextSms = do
@@ -191,10 +203,11 @@ foreign import md5Hash :: String -> String
 -- | (eg: session start time or time just before OTP trigger). The second
 -- | argument specifies the frequency with which the poller should run (suggested
 -- | frequency: 2 seconds). This requires SMS permission to work
+-- | Calling `getName` on this will return the string "SMS_POLLER".
 smsPoller :: Milliseconds -> Milliseconds -> Effect SmsReader
 smsPoller startTime frequency = do
   processedRef <- Ref.new []
-  pure $ SmsReader $ getNextSms processedRef
+  pure $ SmsReader "SMS_POLLER" $ getNextSms processedRef
   where
     getNextSms :: Ref (Array String) -> Aff (Either Error (Array Sms))
     getNextSms processedRef = do
@@ -223,8 +236,9 @@ foreign import getCurrentTime :: Effect Number
 -- | Capture incoming OTPs by listening for clipboard changes. The body could
 -- | either be the the entire SMS body or the OTP itself. In both cases, the OTP
 -- | should be extractable by `extractOtp`
+-- | Calling `getName` on this will return the string "CLIPBOARD"
 clipboard :: SmsReader
-clipboard = SmsReader getNextSms
+clipboard = SmsReader "CLIPBOARD" getNextSms
   where
     getNextSms :: Aff (Either Error (Array Sms))
     getNextSms = do
@@ -243,24 +257,12 @@ clipboard = SmsReader getNextSms
     }
 
 
+-- | Internal type used to represent a received SMS and the `SmsReader` that
+-- | captured it
+data ReceivedSms = ReceivedSms Sms SmsReader
 
--- | Return type of `getOtpListener` function.
--- |
--- | The `getNextOtp` function blocks until an OTP is received. It uses the list
--- | of `SmsReader`s passed to `getOtpListener` to caputre incoming SMSs and
--- | returns the first one to match an `OtpRule`.
--- |
--- | The `setOtpRules` function is used to set the OtpRules that should be used
--- | for attempting to exctract an OTP from any incoming SMSs.
--- |
--- | At first, no OTP rules are set and calling `getNextOtp` will not return any
--- | OTPs. Instead any incoming SMSs will be queued until `setOtpRules` is called
--- | for the first time at which point, the queued up SMSs will be validated and
--- | an OTP returned if any of them match any rule.
-type OtpListener = {
-  getNextOtp :: Aff (Either Error String),
-  setOtpRules :: Array OtpRule -> Aff Unit
-}
+-- | Internal type used as the monad inside `getNextOtp`
+type OtpM a = ExceptT OtpError Aff a
 
 
 
@@ -279,48 +281,98 @@ getOtpListener readers = do
     getNextOtp = do
       otpRulesSet <- isOtpRulesSet otpRulesVar
       smsList <- if otpRulesSet
-          then waitForSms
-          else oneOfAff [waitForSms, waitForOtpRules otpRulesVar *> getUnprocessedSms unprocessedSmsVar]
+          then ExceptT $ waitForSms readers
+          else ExceptT $ oneOfAff [
+            waitForSms readers,
+            waitForOtpRules otpRulesVar *> (Right <$> getUnprocessedSms unprocessedSmsVar)
+          ]
       otpRules <- getOtpRules otpRulesVar
-      case smsList, otpRules of
-        Left err, _ -> pure $ Left err
-        Right s , Nothing -> addToUnprocessed unprocessedSmsVar s *> getNextOtp
-        Right s, Just rules -> maybe (getNextOtp) (Right >>> pure) $ extractOtp s rules
+      case otpRules of
+        Nothing -> addToUnprocessed unprocessedSmsVar smsList *> getNextOtp
+        Just rules -> maybe getNextOtp pure $ findMap (tryExtract rules) smsList
   pure {
-    getNextOtp,
+    getNextOtp: (either Error identity) <$> runExceptT getNextOtp,
     setOtpRules
   }
   where
     oneOfAff :: forall f a. (Foldable f) => (Functor f) => f (Aff a) -> Aff a
     oneOfAff affs = sequential $ oneOf $ parallel <$> affs
 
-    waitForSms :: Aff (Either Error (Array Sms))
-    waitForSms = oneOfAff $ (\(SmsReader r) -> r) <$> readers
+    waitForSms :: Array SmsReader -> Aff (Either OtpError (Array ReceivedSms))
+    waitForSms smsReaders = oneOfAff $ smsReaders <#> (\reader@(SmsReader _ r) -> do
+        res <- r
+        pure $ case res of
+          Left err -> Left (SmsReaderError err reader)
+          Right smses -> Right $ (\sms -> ReceivedSms sms reader) <$> smses
+      )
 
     waitForOtpRules :: AVar (Array OtpRule) -> Aff (Array OtpRule)
     waitForOtpRules otpRulesVar = AVar.read otpRulesVar
 
-    getOtpRules :: AVar (Array OtpRule) -> Aff (Maybe (Array OtpRule))
-    getOtpRules otpRulesVar = AVar.tryRead otpRulesVar
+    getOtpRules :: AVar (Array OtpRule) -> OtpM (Maybe (Array OtpRule))
+    getOtpRules otpRulesVar = lift $ AVar.tryRead otpRulesVar
 
-    getUnprocessedSms :: AVar (Array Sms) -> Aff (Either Error (Array Sms))
-    getUnprocessedSms unprocessedSmsVar = Right <$> AVar.read unprocessedSmsVar
+    getUnprocessedSms :: AVar (Array ReceivedSms) -> Aff (Array ReceivedSms)
+    getUnprocessedSms unprocessedSmsVar = AVar.read unprocessedSmsVar
 
-    isOtpRulesSet :: AVar (Array OtpRule) -> Aff Boolean
-    isOtpRulesSet otpRulesVar = AVar.isFilled <$> AVar.status otpRulesVar
+    isOtpRulesSet :: AVar (Array OtpRule) -> OtpM Boolean
+    isOtpRulesSet otpRulesVar = lift $ AVar.isFilled <$> AVar.status otpRulesVar
 
-    addToUnprocessed :: AVar (Array Sms) -> Array Sms -> Aff Unit
-    addToUnprocessed unprocessedSmsVar sms = do
+    addToUnprocessed :: AVar (Array ReceivedSms) -> Array ReceivedSms -> OtpM Unit
+    addToUnprocessed unprocessedSmsVar sms = lift do
       unprocessed <- AVar.take unprocessedSmsVar
       AVar.put (unprocessed <> sms) unprocessedSmsVar
 
+    tryExtract :: Array OtpRule -> ReceivedSms -> Maybe Otp
+    tryExtract rules (ReceivedSms sms reader) = (\otp -> Otp otp sms reader) <$> extractOtp sms rules
 
 
--- | Given a list of SMSs and a list of OTP rules, it will return the first OTP
+
+-- | Return type of `getOtpListener` function.
+-- |
+-- | The `getNextOtp` function blocks until an OTP is received. It uses the list
+-- | of `SmsReader`s passed to `getOtpListener` to caputre incoming SMSs and
+-- | returns the first one to match an `OtpRule`.
+-- |
+-- | The `setOtpRules` function is used to set the OtpRules that should be used
+-- | for attempting to exctract an OTP from any incoming SMSs.
+-- |
+-- | At first, no OTP rules are set and calling `getNextOtp` will not return any
+-- | OTPs. Instead any incoming SMSs will be queued until `setOtpRules` is called
+-- | for the first time at which point, the queued up SMSs will be validated and
+-- | an OTP returned if any of them match any rule.
+type OtpListener = {
+  getNextOtp :: Aff Otp,
+  setOtpRules :: Array OtpRule -> Aff Unit
+}
+
+
+-- | Return type of `OtpListener.getNextOtp`.
+-- |
+-- | In case of success, it provides the OTP string, the SMS from which that OTP
+-- | was extracted and the `SmsReader` that captured that SMS. (You can use
+-- | `getName` to get the name of the SMS Reader that caputed the SMS).
+-- |
+-- | In case of an error, it provides an `OtpError` type.
+data Otp = Otp String Sms SmsReader | Error OtpError
+
+-- | Represents an error that occured during `OtpListener.getNextOtp`. It can
+-- | either be an `Error` thrown by one of the `SmsReader`s or some other generic
+-- | `Error`. In case of an `SmsReader` error, the `SmsReader` that threw the
+-- | error is also provided. (You can use `getName` to get the name of the SMS
+-- | Reader that threw the error).
+data OtpError = SmsReaderError Error SmsReader | OtherError Error
+
+instance showOtpError :: Show OtpError where
+  show (SmsReaderError e _) = show e
+  show (OtherError e) = show e
+
+
+-- | Given an SMS and a list of OTP rules, it will return the first OTP
 -- | that matches one of the given rules or `Nothing` if none of them match.
-extractOtp :: Array Sms -> Array OtpRule -> Maybe String
+extractOtp :: Sms -> Array OtpRule -> Maybe String
 extractOtp sms rules =
-  findMap (\rule -> findMap (matchAndExtract rule) sms) rules
+  findMap (\rule -> matchAndExtract rule sms) rules
 
 
 

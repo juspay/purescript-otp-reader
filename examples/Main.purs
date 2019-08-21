@@ -4,13 +4,14 @@ import Prelude
 
 import Control.Monad.Error.Class (throwError)
 import Control.Monad.Except (runExcept)
-import Data.Either (Either(..), either)
+import Data.Either (either)
+import Data.Generic.Rep.Show (genericShow)
 import Effect (Effect)
 import Effect.Aff (Aff, Milliseconds(..), runAff_)
 import Effect.Class (liftEffect)
 import Effect.Class.Console (errorShow, log, logShow)
 import Effect.Exception (error, throwException)
-import Juspay.OTP.Reader (OtpListener, clipboard, getGodelOtpRules, getOtpListener, requestSmsReadPermission, smsPoller, smsReceiver)
+import Juspay.OTP.Reader (Otp(..), OtpListener, clipboard, getGodelOtpRules, getName, getOtpListener, requestSmsReadPermission, smsPoller, smsReceiver)
 
 foreign import init :: Effect Unit
 foreign import getTime :: Effect Number
@@ -50,6 +51,6 @@ otpLoop listener = do
   log "Listening for otp"
   res <- listener.getNextOtp -- blocks until an HDFC OTP is received
   case res of
-    Right otp -> log $ "OTP: " <> otp
-    Left err -> logShow err
+    Otp otp sms reader -> log $ "OTP received from " <> getName reader <> ": " <> otp <> "\nSMS: " <> genericShow sms
+    Error err -> logShow err
   otpLoop listener

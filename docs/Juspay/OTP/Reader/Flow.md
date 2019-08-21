@@ -43,7 +43,7 @@ frequency: 2 seconds). This requires SMS permission to work
 #### `OtpListener`
 
 ``` purescript
-type OtpListener = { getNextOtp :: Flow (Either Error String), setOtpRules :: Array OtpRule -> Flow Unit }
+type OtpListener = { getNextOtp :: Flow Otp, setOtpRules :: Array OtpRule -> Flow Unit }
 ```
 
 #### `getOtpListener`
@@ -64,18 +64,21 @@ the `OtpListener` type for more info on how to get OTPs and set OTP rules.
 #### `SmsReader`
 
 ``` purescript
-newtype SmsReader
-  = SmsReader (Aff (Either Error (Array Sms)))
+data SmsReader
+  = SmsReader String (Aff (Either Error (Array Sms)))
 ```
 
 This type represents a method of reading incoming SMSs from the OS. If newer
-methods of reading SMSs need to be created, use this type
+methods of reading SMSs need to be created, use this type.
+The first parameter is the name of the SMS Reader as a String (useful for
+differentiating between SmsReaders`s). The second argument is the function
+to be used to wait for the next SMS.
 
 #### `Sms`
 
 ``` purescript
 newtype Sms
-  = Sms { from :: String, body :: String, time :: String }
+  = Sms { body :: String, from :: String, time :: String }
 ```
 
 Type representing an SMS received using any `SmsReader`s.
@@ -94,7 +97,7 @@ Decode Sms
 
 ``` purescript
 newtype OtpRule
-  = OtpRule { matches :: { sender :: Array String, message :: String }, otp :: String, group :: Maybe Int }
+  = OtpRule { group :: Maybe Int, matches :: { message :: String, sender :: Array String }, otp :: String }
 ```
 
 Represents a rule for matching and extracting an OTP. An SMS will
@@ -115,6 +118,41 @@ Encode OtpRule
 Decode OtpRule
 ```
 
+#### `OtpError`
+
+``` purescript
+data OtpError
+  = SmsReaderError Error SmsReader
+  | OtherError Error
+```
+
+Represents an error that occured during `OtpListener.getNextOtp`. It can
+either be an `Error` thrown by one of the `SmsReader`s or some other generic
+`Error`. In case of an `SmsReader` error, the `SmsReader` that threw the
+error is also provided. (You can use `getName` to get the name of the SMS
+Reader that threw the error).
+
+##### Instances
+``` purescript
+Show OtpError
+```
+
+#### `Otp`
+
+``` purescript
+data Otp
+  = Otp String Sms SmsReader
+  | Error OtpError
+```
+
+Return type of `OtpListener.getNextOtp`.
+
+In case of success, it provides the OTP string, the SMS from which that OTP
+was extracted and the `SmsReader` that captured that SMS. (You can use
+`getName` to get the name of the SMS Reader that caputed the SMS).
+
+In case of an error, it provides an `OtpError` type.
+
 #### `smsReceiver`
 
 ``` purescript
@@ -122,15 +160,24 @@ smsReceiver :: SmsReader
 ```
 
 Capture incoming SMSs by registering an Android Broadcast Receiver for
-SMS_RECEIVED action. This requires SMS permission to work
+SMS_RECEIVED action. This requires SMS permission to work.
+Calling `getName` on this will return the string "SMS_RECEIVER".
+
+#### `getName`
+
+``` purescript
+getName :: SmsReader -> String
+```
+
+Get the name of an `SmsReader`. Useful for differentiating between `SmsReader`s
 
 #### `extractOtp`
 
 ``` purescript
-extractOtp :: Array Sms -> Array OtpRule -> Maybe String
+extractOtp :: Sms -> Array OtpRule -> Maybe String
 ```
 
-Given a list of SMSs and a list of OTP rules, it will return the first OTP
+Given an SMS and a list of OTP rules, it will return the first OTP
 that matches one of the given rules or `Nothing` if none of them match.
 
 #### `clipboard`
@@ -142,4 +189,5 @@ clipboard :: SmsReader
 Capture incoming OTPs by listening for clipboard changes. The body could
 either be the the entire SMS body or the OTP itself. In both cases, the OTP
 should be extractable by `extractOtp`
+Calling `getName` on this will return the string "CLIPBOARD"
 

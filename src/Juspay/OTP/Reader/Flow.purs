@@ -10,12 +10,11 @@ module Juspay.OTP.Reader.Flow (
 
 import Prelude
 
-import Data.Either (Either)
 import Effect (Effect)
-import Effect.Aff (Aff, Error, Milliseconds)
+import Effect.Aff (Aff, Milliseconds)
 import Effect.Class (liftEffect)
 import Foreign (F)
-import Juspay.OTP.Reader (OtpRule(..), Sms(..), SmsReader(..), clipboard, extractOtp, smsReceiver)
+import Juspay.OTP.Reader (Otp(..), OtpError(..), OtpRule(..), Sms(..), SmsReader(..), clipboard, extractOtp, getName, smsReceiver)
 import Juspay.OTP.Reader as O
 import Presto.Core.Types.Language.Flow (Flow, doAff)
 
@@ -51,7 +50,7 @@ requestSmsReadPermission :: Flow Boolean
 requestSmsReadPermission = doAff' O.requestSmsReadPermission
 
 type OtpListener = {
-  getNextOtp :: Flow (Either Error String),
+  getNextOtp :: Flow Otp,
   setOtpRules :: Array OtpRule -> Flow Unit
 }
 

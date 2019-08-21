@@ -59,12 +59,12 @@ getOtpListener :: Array SmsReader -> Flow OtpListener
 
 ```purescript
 type OtpListener = {
-  getNextOtp :: Flow (Either Error String),
+  getNextOtp :: Flow Otp,
   setOtpRules :: Array OtpRule -> Flow Unit
 }
 ```
 
-Call the `getNextOtp` function when you want to wait for an OTP. The function will block until a received SMS succeeds OTP extraction.
+Call the `getNextOtp` function when you want to wait for an OTP. The function will block until a received SMS succeeds OTP extraction (or an error occurs).
 
 Call the `setOtpRules` function to set the OTP regex rules that need to be used for extracting the OTP from incoming SMSs.
 
