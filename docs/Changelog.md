@@ -12,5 +12,6 @@ Features:
 * Functions to get OTP Rules from Godel
 
 NPM Dependency URL:
-  * https://bitbucket.org/juspay/purescript-otp-reader.git#v0.1
-  * https://bitbucket.org/juspay/purescript-otp-reader.git#v0.1-purs11
+
+* https://bitbucket.org/juspay/purescript-otp-reader.git#v0.1
+* https://bitbucket.org/juspay/purescript-otp-reader.git#v0.1-purs11
