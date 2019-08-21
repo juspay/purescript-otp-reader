@@ -31,7 +31,7 @@ example = do
   currentTime <- liftEffect getTime
   let pollerStartTime = Milliseconds currentTime
       pollerFrequency = Milliseconds 2000.0
-  poller <- liftEffect $ smsPoller (Milliseconds currentTime) (Milliseconds 2000.0)
+  poller <- liftEffect $ smsPoller pollerStartTime pollerFrequency
 
   -- Request SMS permission. If granted, use Receiver and Poller. Else listen to Clipboard for copied OTP/SMS
   permissionGranted <- requestSmsReadPermission
