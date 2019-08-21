@@ -4,6 +4,7 @@ Use this library to do any kind of OTP reading. It currently supports the follow
 
 * SMS Receiver
 * SMS Inbox Polling
+* Clipboard
 
 # How to use
 

@@ -86,6 +86,19 @@ exports.readSms = function (time) {
   }
 };
 
+exports.getCurrentTime = function() {
+  return Date.now();
+}
+
+exports.onClipboardChange = function(callback) {
+  return function() {
+    var cb = callbackMapper.map(function(s) {
+      callback(s)();
+    })
+    DUIGatekeeper.onClipboardChange(cb);
+  }
+}
+
 exports.md5Hash = function (s) {
   return DUIGatekeeper.getMd5(s);
 };

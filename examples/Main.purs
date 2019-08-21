@@ -10,7 +10,7 @@ import Effect.Aff (Aff, Milliseconds(..), runAff_)
 import Effect.Class (liftEffect)
 import Effect.Class.Console (errorShow, log, logShow)
 import Effect.Exception (error, throwException)
-import Juspay.OTP.Reader (OtpListener, getGodelOtpRules, getOtpListener, requestSmsReadPermission, smsPoller, smsReceiver)
+import Juspay.OTP.Reader (OtpListener, clipboard, getGodelOtpRules, getOtpListener, requestSmsReadPermission, smsPoller, smsReceiver)
 
 foreign import init :: Effect Unit
 foreign import getTime :: Effect Number
@@ -23,22 +23,22 @@ main = do
 
 example :: Aff Unit
 example = do
-  -- Request SMS permission. Throw an error if not granted
-  permissionGranted <- requestSmsReadPermission
-  if not permissionGranted then throwError (error "No permission") else pure unit
-
   -- Attempt to get HDFC OTP rules from Godel's config. Throw an error if it fails to decode
   rulesF <- liftEffect $ runExcept <$> getGodelOtpRules "HDFC"
   otpRules <- liftEffect $ either (show >>> error >>> throwException) (pure) rulesF
 
-  -- Get an OTP listener that uses SMS Receiver and SMS Poller
+  -- initialize an SMS inbox poller with current time as start time
   currentTime <- liftEffect getTime
   let pollerStartTime = Milliseconds currentTime
       pollerFrequency = Milliseconds 2000.0
   poller <- liftEffect $ smsPoller (Milliseconds currentTime) (Milliseconds 2000.0)
-  otpListener <- getOtpListener [smsReceiver, poller]
 
-  -- Set the OTP rules
+  -- Request SMS permission. If granted, use Receiver and Poller. Else listen to Clipboard for copied OTP/SMS
+  permissionGranted <- requestSmsReadPermission
+  let smsReaders = if permissionGranted then [smsReceiver, poller] else [clipboard]
+
+  -- Create an OTP listener and set the OTP rules
+  otpListener <- getOtpListener smsReaders
   otpListener.setOtpRules otpRules
 
   -- Loop and log incoming HDFC OTPs

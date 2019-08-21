@@ -65,7 +65,7 @@ the `OtpListener` type for more info on how to get OTPs and set OTP rules.
 
 ``` purescript
 newtype SmsReader
-  = SmsReader (forall e. Aff e (Either Error (Array Sms)))
+  = SmsReader (Aff (Either Error (Array Sms)))
 ```
 
 This type represents a method of reading incoming SMSs from the OS. If newer
@@ -132,4 +132,14 @@ extractOtp :: Array Sms -> Array OtpRule -> Maybe String
 
 Given a list of SMSs and a list of OTP rules, it will return the first OTP
 that matches one of the given rules or `Nothing` if none of them match.
+
+#### `clipboard`
+
+``` purescript
+clipboard :: SmsReader
+```
+
+Capture incoming OTPs by listening for clipboard changes. The body could
+either be the the entire SMS body or the OTP itself. In both cases, the OTP
+should be extractable by `extractOtp`
 

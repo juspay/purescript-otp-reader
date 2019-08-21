@@ -15,7 +15,7 @@ import Effect (Effect)
 import Effect.Aff (Aff, Error, Milliseconds)
 import Effect.Class (liftEffect)
 import Foreign (F)
-import Juspay.OTP.Reader (OtpRule(..), Sms(..), SmsReader(..), extractOtp, smsReceiver)
+import Juspay.OTP.Reader (OtpRule(..), Sms(..), SmsReader(..), clipboard, extractOtp, smsReceiver)
 import Juspay.OTP.Reader as O
 import Presto.Core.Types.Language.Flow (Flow, doAff)
 

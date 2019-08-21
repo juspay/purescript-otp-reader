@@ -47,7 +47,7 @@ Decode OtpRule
 #### `getGodelOtpRules`
 
 ``` purescript
-getGodelOtpRules :: forall e. String -> Eff e (F (Array OtpRule))
+getGodelOtpRules :: String -> Effect (F (Array OtpRule))
 ```
 
 Gets bank OTP rules from Godel's config.
@@ -56,7 +56,7 @@ Gets bank OTP rules from Godel's config.
 
 ``` purescript
 newtype SmsReader
-  = SmsReader (forall e. Aff e (Either Error (Array Sms)))
+  = SmsReader (Aff (Either Error (Array Sms)))
 ```
 
 This type represents a method of reading incoming SMSs from the OS. If newer
@@ -74,7 +74,7 @@ SMS_RECEIVED action. This requires SMS permission to work
 #### `smsPoller`
 
 ``` purescript
-smsPoller :: forall e. Milliseconds -> Milliseconds -> Eff e SmsReader
+smsPoller :: Milliseconds -> Milliseconds -> Effect SmsReader
 ```
 
 Capture incoming SMSs by polling the SMS inbox at regular intervals. The
@@ -83,10 +83,20 @@ first argument specifies the earliest time from which SMSs should be read
 argument specifies the frequency with which the poller should run (suggested
 frequency: 2 seconds). This requires SMS permission to work
 
+#### `clipboard`
+
+``` purescript
+clipboard :: SmsReader
+```
+
+Capture incoming OTPs by listening for clipboard changes. The body could
+either be the the entire SMS body or the OTP itself. In both cases, the OTP
+should be extractable by `extractOtp`
+
 #### `getSmsReadPermission`
 
 ``` purescript
-getSmsReadPermission :: forall e. Eff e Boolean
+getSmsReadPermission :: Effect Boolean
 ```
 
 Checks if Android SMS Read permission has been granted
@@ -94,7 +104,7 @@ Checks if Android SMS Read permission has been granted
 #### `requestSmsReadPermission`
 
 ``` purescript
-requestSmsReadPermission :: forall e. Aff e Boolean
+requestSmsReadPermission :: Aff Boolean
 ```
 
 Requests Android SMS Read permission from the user
@@ -102,7 +112,7 @@ Requests Android SMS Read permission from the user
 #### `OtpListener`
 
 ``` purescript
-type OtpListener = { getNextOtp :: forall e. Aff e (Either Error String), setOtpRules :: forall e. Array OtpRule -> Aff e Unit }
+type OtpListener = { getNextOtp :: Aff (Either Error String), setOtpRules :: Array OtpRule -> Aff Unit }
 ```
 
 Return type of `getOtpListener` function.
@@ -122,7 +132,7 @@ an OTP returned if any of them match any rule.
 #### `getOtpListener`
 
 ``` purescript
-getOtpListener :: forall e. Array SmsReader -> Aff e OtpListener
+getOtpListener :: Array SmsReader -> Aff OtpListener
 ```
 
 Takes an array of `SmsReader`s and returns functions to get OTPs. It uses the

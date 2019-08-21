@@ -5,6 +5,7 @@ module Juspay.OTP.Reader (
     SmsReader(..),
     smsReceiver,
     smsPoller,
+    clipboard,
     getSmsReadPermission,
     requestSmsReadPermission,
     OtpListener,
@@ -214,6 +215,32 @@ smsPoller startTime frequency = do
 
     notProcessed :: Array String -> Sms -> Boolean
     notProcessed processed sms = not $ elem (hashSms sms) processed
+
+
+foreign import onClipboardChange :: (String -> Effect Unit) -> Effect Unit
+foreign import getCurrentTime :: Effect Number
+
+-- | Capture incoming OTPs by listening for clipboard changes. The body could
+-- | either be the the entire SMS body or the OTP itself. In both cases, the OTP
+-- | should be extractable by `extractOtp`
+clipboard :: SmsReader
+clipboard = SmsReader getNextSms
+  where
+    getNextSms :: Aff (Either Error (Array Sms))
+    getNextSms = do
+      smsString <- makeAff (\cb -> onClipboardChange (Right >>> cb) *> pure nonCanceler)
+      currentTime <- liftEffect getCurrentTime
+      let stringArray = (decodeAndTrack >>> hush >>> maybe [] identity) smsString
+          sms = toSms currentTime <$> stringArray
+      if length sms < 1
+        then getNextSms
+        else pure $ Right sms
+    toSms :: Number -> String -> Sms
+    toSms time body = Sms {
+      from: "UNKNOWN_BANK",
+      body,
+      time: encodeJSON time
+    }
 
 
 
