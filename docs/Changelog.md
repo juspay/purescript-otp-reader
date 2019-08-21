@@ -6,6 +6,7 @@ For a given `vX.X` tag, there might be a `vX.X-purs11` tag which is the same ver
 First release
 
 Features:
+
 * SMS Receiver
 * SMS Poller
 * Functions to get SMS Read permissions
