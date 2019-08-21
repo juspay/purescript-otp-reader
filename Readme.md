@@ -22,9 +22,7 @@ To add this module as a dependency to your project, add this line to the depende
 
 Replace `<version>` with the tag of the version you want to use.
 
-To see all versions, go to [commits](https://bitbucket.org/juspay/purescript-otp-reader/commits/) and change the filter to tags.
-
-For every `vX.X` tag there will usually be a tag `vX.X-purs11` which is the same version for PureSctipt 11 in case you need it.
+To see all versions, check the [changelog](docs/Changelog.md).
 
 _Note: please avoid writing a branch name after the `#`. Use either tags or  commit hashes_
 
