@@ -95,12 +95,12 @@ exports.startSmsConsentAPI = function (callback) {
     var cb = callbackMapper.map(function(data) {
       callback(data)();
     });
-    DUIGatekeeper.attach("SMS_CONSENT","{}",cb);
+    JBridge.attach("SMS_CONSENT","{}",cb);
   }
 };
 
 exports.stopSmsConsentAPI = function () {
-  DUIGatekeeper.detach(["SMS_CONSENT"]);
+  JBridge.detach(["SMS_CONSENT"]);
 };
 
 exports.readSms = function (time) {
@@ -114,7 +114,7 @@ exports.getCurrentTime = function() {
 }
 
 exports.isClipboardSupported = function() {
-  return typeof DUIGatekeeper.onClipboardChange == "function";
+  return typeof JBridge.onClipboardChange == "function";
 }
 
 exports.onClipboardChange = function(callback) {
@@ -122,7 +122,7 @@ exports.onClipboardChange = function(callback) {
     var cb = callbackMapper.map(function(s) {
       callback(s)();
     })
-    DUIGatekeeper.onClipboardChange(cb);
+    JBridge.onClipboardChange(cb);
   }
 }
 
