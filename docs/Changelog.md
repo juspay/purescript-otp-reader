@@ -2,6 +2,18 @@ All versions and their changelogs. The version names are git tags. So if you wan
 
 For a given `vX.X` tag, there might be a `vX.X-purs11` tag which is the same version but in PureScript version 11 in case you need it.
 
+## v0.3 / v0.3-purs11
+
+Features:
+* Added User Consent API as a new `SmsReader` along with a function to check if User Consent API is supported/available at runtime
+* Added a function to check if Clipboard APIs are present/supported at runtime
+* Replaced all `DUIGatekeeper` usages with `JBridge` (bug-fix)
+
+NPM Dependency URL:
+
+* https://bitbucket.org/juspay/purescript-otp-reader.git#v0.3
+* https://bitbucket.org/juspay/purescript-otp-reader.git#v0.3-purs11
+
 ## v0.2 / v0.2-purs11
 
 Features:
