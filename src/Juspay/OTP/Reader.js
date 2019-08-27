@@ -67,10 +67,10 @@ exports["requestSmsReadPermission'"] = function(callback) {
   }
 }
 
-exports.startSmsReceiver = function (success) {
+exports.startSmsReceiver = function (callback) {
   return function() {
     var cb = callbackMapper.map(function(data) {
-      success(data)();
+      callback(data)();
     });
     DUIGatekeeper.attach("SMS_RECEIVE","{}",cb);
   }
@@ -78,6 +78,29 @@ exports.startSmsReceiver = function (success) {
 
 exports.stopSmsReceiver = function () {
   DUIGatekeeper.detach(["SMS_RECEIVE"]);
+};
+
+exports.isConsentAPISupported = function() {
+  try {
+    // User consent API was added along with androidX migration in godel-core
+    var usingAndroidX = JBridge.getResourceByName("using_androidx");
+    return usingAndroidX
+  } catch(e) {
+    return false;
+  }
+}
+
+exports.startSmsConsentAPI = function (callback) {
+  return function() {
+    var cb = callbackMapper.map(function(data) {
+      callback(data)();
+    });
+    DUIGatekeeper.attach("SMS_CONSENT","{}",cb);
+  }
+};
+
+exports.stopSmsConsentAPI = function () {
+  DUIGatekeeper.detach(["SMS_CONSENT"]);
 };
 
 exports.readSms = function (time) {

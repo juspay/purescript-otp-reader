@@ -4,6 +4,7 @@ module Juspay.OTP.Reader.Flow (
     getSmsReadPermission,
     requestSmsReadPermission,
     smsPoller,
+    isConsentAPISupported,
     isClipboardSupported,
     OtpListener,
     getOtpListener
@@ -15,7 +16,7 @@ import Effect (Effect)
 import Effect.Aff (Aff, Milliseconds)
 import Effect.Class (liftEffect)
 import Foreign (F)
-import Juspay.OTP.Reader (Otp(..), OtpError(..), OtpRule(..), Sms(..), SmsReader(..), clipboard, extractOtp, getName, smsReceiver)
+import Juspay.OTP.Reader (Otp(..), OtpError(..), OtpRule(..), Sms(..), SmsReader(..), clipboard, extractOtp, getName, smsConsentAPI, smsReceiver)
 import Juspay.OTP.Reader as O
 import Presto.Core.Types.Language.Flow (Flow, doAff)
 
@@ -39,6 +40,10 @@ getGodelOtpRules = doEff' <<< O.getGodelOtpRules
 smsPoller :: Milliseconds -> Milliseconds -> Flow SmsReader
 smsPoller startTime frequency = do
   doEff' $ O.smsPoller startTime frequency
+
+-- | Check if User Consent API functions are available
+isConsentAPISupported :: Flow Boolean
+isConsentAPISupported = doEff' O.isConsentAPISupported
 
 -- | Check if the JBridge functions for Clipboard are available.
 isClipboardSupported :: Flow Boolean

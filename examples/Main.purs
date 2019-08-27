@@ -4,14 +4,17 @@ import Prelude
 
 import Control.Monad.Error.Class (throwError)
 import Control.Monad.Except (runExcept)
+import Data.Array (catMaybes, length)
 import Data.Either (either)
 import Data.Generic.Rep.Show (genericShow)
+import Data.Maybe (Maybe(..))
+import Data.String (joinWith)
 import Effect (Effect)
 import Effect.Aff (Aff, Milliseconds(..), runAff_)
 import Effect.Class (liftEffect)
 import Effect.Class.Console (errorShow, log, logShow)
 import Effect.Exception (error, throwException)
-import Juspay.OTP.Reader (Otp(..), OtpListener, clipboard, getGodelOtpRules, getName, getOtpListener, isClipboardSupported, requestSmsReadPermission, smsPoller, smsReceiver)
+import Juspay.OTP.Reader (Otp(..), OtpListener, clipboard, getGodelOtpRules, getName, getOtpListener, isClipboardSupported, isConsentAPISupported, requestSmsReadPermission, smsConsentAPI, smsPoller, smsReceiver)
 
 foreign import init :: Effect Unit
 foreign import getTime :: Effect Number
@@ -37,11 +40,15 @@ example = do
   -- Request SMS permission. If granted, use Receiver and Poller. Else listen to Clipboard for copied OTP/SMS
   permissionGranted <- requestSmsReadPermission
   clipboardSupported <- liftEffect isClipboardSupported
-  smsReaders <- if permissionGranted
-                  then pure [smsReceiver, poller]
-                else if clipboardSupported
-                  then pure [clipboard]
-                else throwError $ error "No supported methods for SMS reading"
+  consentAPISupported <- liftEffect isConsentAPISupported
+  let smsReaders = catMaybes [
+                    if permissionGranted then Just smsReceiver else Nothing,
+                    if permissionGranted then Just poller else Nothing,
+                    if not permissionGranted && clipboardSupported then Just clipboard else Nothing,
+                    if not permissionGranted && consentAPISupported then Just smsConsentAPI else Nothing
+                  ]
+  if length smsReaders < 1 then throwError $ error "No supported methods for SMS reading" else pure unit
+  log $ "Using SMS Readers: " <> joinWith "," (getName <$> smsReaders)
 
   -- Create an OTP listener and set the OTP rules
   otpListener <- getOtpListener smsReaders

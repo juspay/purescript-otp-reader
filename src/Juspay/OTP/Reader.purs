@@ -6,6 +6,8 @@ module Juspay.OTP.Reader (
     getName,
     smsReceiver,
     smsPoller,
+    isConsentAPISupported,
+    smsConsentAPI,
     isClipboardSupported,
     clipboard,
     getSmsReadPermission,
@@ -23,7 +25,7 @@ import Control.Monad.Except (runExcept)
 import Control.Monad.Except.Trans (ExceptT(..), runExceptT)
 import Control.Monad.Trans.Class (lift)
 import Control.Parallel (parallel, sequential)
-import Data.Array (catMaybes, elem, filter, filterA, findMap, length, null)
+import Data.Array (catMaybes, elem, filter, filterA, findMap, length, null, singleton)
 import Data.Array.NonEmpty ((!!))
 import Data.Either (Either(..), either, hush)
 import Data.Foldable (class Foldable, oneOf)
@@ -229,6 +231,33 @@ smsPoller startTime frequency = do
 
     notProcessed :: Array String -> Sms -> Boolean
     notProcessed processed sms = not $ elem (hashSms sms) processed
+
+
+
+foreign import startSmsConsentAPI :: (String -> Effect Unit) -> Effect Unit
+foreign import stopSmsConsentAPI :: Effect Unit
+
+-- | Check if User Consent API functions are available
+foreign import isConsentAPISupported :: Effect Boolean
+
+-- | Capture incoming SMSs by using Android's User Consent API.
+-- | Make sure you call `isConsentAPISupported` first to check if it's supported,
+-- | else it will throw an error immediately
+-- | Calling `getName` on this will return the string "SMS_CONSENT".
+smsConsentAPI :: SmsReader
+smsConsentAPI = SmsReader "SMS_CONSENT" getNextSms
+  where
+  getNextSms :: Aff (Either Error (Array Sms))
+  getNextSms = do
+    consentAPISupported <- liftEffect isConsentAPISupported
+    if not consentAPISupported then pure $ Left $ error "User Consent API is not available"
+      else do
+        smsString <- makeAff (\cb -> startSmsConsentAPI (Right >>> cb) *> pure (effectCanceler stopSmsReceiver))
+        let sms = (decodeAndTrack >>> hush >>> maybe [] singleton) smsString
+        if length sms < 1
+          then getNextSms
+          else pure $ Right sms
+
 
 
 foreign import onClipboardChange :: (String -> Effect Unit) -> Effect Unit
