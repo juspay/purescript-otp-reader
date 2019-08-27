@@ -11,7 +11,7 @@ import Effect.Aff (Aff, Milliseconds(..), runAff_)
 import Effect.Class (liftEffect)
 import Effect.Class.Console (errorShow, log, logShow)
 import Effect.Exception (error, throwException)
-import Juspay.OTP.Reader (Otp(..), OtpListener, clipboard, getGodelOtpRules, getName, getOtpListener, requestSmsReadPermission, smsPoller, smsReceiver)
+import Juspay.OTP.Reader (Otp(..), OtpListener, clipboard, getGodelOtpRules, getName, getOtpListener, isClipboardSupported, requestSmsReadPermission, smsPoller, smsReceiver)
 
 foreign import init :: Effect Unit
 foreign import getTime :: Effect Number
@@ -36,7 +36,12 @@ example = do
 
   -- Request SMS permission. If granted, use Receiver and Poller. Else listen to Clipboard for copied OTP/SMS
   permissionGranted <- requestSmsReadPermission
-  let smsReaders = if permissionGranted then [smsReceiver, poller] else [clipboard]
+  clipboardSupported <- liftEffect isClipboardSupported
+  smsReaders <- if permissionGranted
+                  then pure [smsReceiver, poller]
+                else if clipboardSupported
+                  then pure [clipboard]
+                else throwError $ error "No supported methods for SMS reading"
 
   -- Create an OTP listener and set the OTP rules
   otpListener <- getOtpListener smsReaders

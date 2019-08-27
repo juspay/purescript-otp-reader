@@ -6,6 +6,7 @@ module Juspay.OTP.Reader (
     getName,
     smsReceiver,
     smsPoller,
+    isClipboardSupported,
     clipboard,
     getSmsReadPermission,
     requestSmsReadPermission,
@@ -35,7 +36,7 @@ import Data.String.Regex.Flags (ignoreCase)
 import Data.Time.Duration (Milliseconds(..))
 import Data.Traversable (traverse)
 import Effect (Effect)
-import Effect.Aff (Aff, delay, effectCanceler, makeAff, nonCanceler)
+import Effect.Aff (Aff, delay, effectCanceler, error, makeAff, nonCanceler)
 import Effect.Aff.AVar (AVar)
 import Effect.Aff.AVar as AVar
 import Effect.Class (liftEffect)
@@ -233,22 +234,31 @@ smsPoller startTime frequency = do
 foreign import onClipboardChange :: (String -> Effect Unit) -> Effect Unit
 foreign import getCurrentTime :: Effect Number
 
+
+-- | Check if the JBridge functions for Clipboard are available.
+foreign import isClipboardSupported :: Effect Boolean
+
 -- | Capture incoming OTPs by listening for clipboard changes. The body could
 -- | either be the the entire SMS body or the OTP itself. In both cases, the OTP
 -- | should be extractable by `extractOtp`
+-- | Make sure you first call `isClipboardSupported` before using this reader,
+-- | else it will immediately throw an Error
 -- | Calling `getName` on this will return the string "CLIPBOARD"
 clipboard :: SmsReader
 clipboard = SmsReader "CLIPBOARD" getNextSms
   where
     getNextSms :: Aff (Either Error (Array Sms))
     getNextSms = do
-      smsString <- makeAff (\cb -> onClipboardChange (Right >>> cb) *> pure nonCanceler)
-      currentTime <- liftEffect getCurrentTime
-      let stringArray = (decodeAndTrack >>> hush >>> maybe [] identity) smsString
-          sms = toSms currentTime <$> stringArray
-      if length sms < 1
-        then getNextSms
-        else pure $ Right sms
+      clipboardSupported <- liftEffect $ isClipboardSupported
+      if not clipboardSupported then pure $ Left $ error "Clipboard API not available"
+        else do
+          smsString <- makeAff (\cb -> onClipboardChange (Right >>> cb) *> pure nonCanceler)
+          currentTime <- liftEffect getCurrentTime
+          let stringArray = (decodeAndTrack >>> hush >>> maybe [] identity) smsString
+              sms = toSms currentTime <$> stringArray
+          if length sms < 1
+            then getNextSms
+            else pure $ Right sms
     toSms :: Number -> String -> Sms
     toSms time body = Sms {
       from: "UNKNOWN_BANK",

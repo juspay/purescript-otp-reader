@@ -90,6 +90,10 @@ exports.getCurrentTime = function() {
   return Date.now();
 }
 
+exports.isClipboardSupported = function() {
+  return typeof DUIGatekeeper.onClipboardChange == "function";
+}
+
 exports.onClipboardChange = function(callback) {
   return function() {
     var cb = callbackMapper.map(function(s) {

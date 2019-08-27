@@ -4,6 +4,7 @@ module Juspay.OTP.Reader.Flow (
     getSmsReadPermission,
     requestSmsReadPermission,
     smsPoller,
+    isClipboardSupported,
     OtpListener,
     getOtpListener
   ) where
@@ -38,6 +39,10 @@ getGodelOtpRules = doEff' <<< O.getGodelOtpRules
 smsPoller :: Milliseconds -> Milliseconds -> Flow SmsReader
 smsPoller startTime frequency = do
   doEff' $ O.smsPoller startTime frequency
+
+-- | Check if the JBridge functions for Clipboard are available.
+isClipboardSupported :: Flow Boolean
+isClipboardSupported = doEff' O.isClipboardSupported
 
 -- | Flow version of `getSmsReadPermission` from Juspay.OTP.Reader
 -- | Checks if Android SMS Read permission has been granted
