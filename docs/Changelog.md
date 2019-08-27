@@ -9,7 +9,7 @@ Features:
 * Added a function to check if Clipboard APIs are present/supported at runtime
 * Replaced all `DUIGatekeeper` usages with `JBridge` (bug-fix)
 
-NPM Dependency URL:
+Dependency URL:
 
 * https://bitbucket.org/juspay/purescript-otp-reader.git#v0.3
 * https://bitbucket.org/juspay/purescript-otp-reader.git#v0.3-purs11
@@ -22,7 +22,7 @@ Features:
 * Along with OTP, return the SMS it was extracted from and the `SmsReader` that captured it
 * Every `SmsReader` now has a String that represents its name. A `getName` function was also added that can be used to get the name of a given `SmsReader`
 
-NPM Dependency URL:
+Dependency URL:
 
 * https://bitbucket.org/juspay/purescript-otp-reader.git#v0.2
 * https://bitbucket.org/juspay/purescript-otp-reader.git#v0.2-purs11
@@ -37,7 +37,7 @@ Features:
 * Functions to get SMS Read permissions
 * Functions to get OTP Rules from Godel
 
-NPM Dependency URL:
+Dependency URL:
 
 * https://bitbucket.org/juspay/purescript-otp-reader.git#v0.1
 * https://bitbucket.org/juspay/purescript-otp-reader.git#v0.1-purs11
