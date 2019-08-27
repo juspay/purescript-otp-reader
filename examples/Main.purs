@@ -37,7 +37,7 @@ example = do
       pollerFrequency = Milliseconds 2000.0
   poller <- liftEffect $ smsPoller pollerStartTime pollerFrequency
 
-  -- Request SMS permission. If granted, use Receiver and Poller. Else listen to Clipboard for copied OTP/SMS
+  -- Request SMS permission. If granted, use Receiver and Poller. Else try Clipboard and Consent API. Else throw an error
   permissionGranted <- requestSmsReadPermission
   clipboardSupported <- liftEffect isClipboardSupported
   consentAPISupported <- liftEffect isConsentAPISupported
