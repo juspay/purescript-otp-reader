@@ -40,6 +40,22 @@ first argument specifies the earliest time from which SMSs should be read
 argument specifies the frequency with which the poller should run (suggested
 frequency: 2 seconds). This requires SMS permission to work
 
+#### `isConsentAPISupported`
+
+``` purescript
+isConsentAPISupported :: Flow Boolean
+```
+
+Check if User Consent API functions are available
+
+#### `isClipboardSupported`
+
+``` purescript
+isClipboardSupported :: Flow Boolean
+```
+
+Check if the JBridge functions for Clipboard are available.
+
 #### `OtpListener`
 
 ``` purescript
@@ -163,6 +179,17 @@ Capture incoming SMSs by registering an Android Broadcast Receiver for
 SMS_RECEIVED action. This requires SMS permission to work.
 Calling `getName` on this will return the string "SMS_RECEIVER".
 
+#### `smsConsentAPI`
+
+``` purescript
+smsConsentAPI :: SmsReader
+```
+
+Capture incoming SMSs by using Android's User Consent API.
+Make sure you call `isConsentAPISupported` first to check if it's supported,
+else it will throw an error immediately
+Calling `getName` on this will return the string "SMS_CONSENT".
+
 #### `getName`
 
 ``` purescript
@@ -189,5 +216,7 @@ clipboard :: SmsReader
 Capture incoming OTPs by listening for clipboard changes. The body could
 either be the the entire SMS body or the OTP itself. In both cases, the OTP
 should be extractable by `extractOtp`
+Make sure you first call `isClipboardSupported` before using this reader,
+else it will immediately throw an Error
 Calling `getName` on this will return the string "CLIPBOARD"
 
