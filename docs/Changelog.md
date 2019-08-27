@@ -5,6 +5,7 @@ For a given `vX.X` tag, there might be a `vX.X-purs11` tag which is the same ver
 ## v0.3 / v0.3-purs11
 
 Features:
+
 * Added User Consent API as a new `SmsReader` along with a function to check if User Consent API is supported/available at runtime
 * Added a function to check if Clipboard APIs are present/supported at runtime
 * Replaced all `DUIGatekeeper` usages with `JBridge` (bug-fix)
