@@ -14,7 +14,7 @@ const callbackMapper = {
 exports["getGodelOtpRules'"] = function() {
   try {
     //Temporarily create an iframe just for loading godel config (so that this microapp's context isn't modified)
-    var configString = DUIGatekeeper.loadFileInDUI('payments/in.juspay.godel/v1-config.jsa');
+    var configString = JBridge.loadFileInDUI('payments/in.juspay.godel/v1-config.jsa');
     var iframe = document.createElement('iframe');
     document.body.appendChild(iframe);
     var w = iframe.contentWindow;
@@ -35,7 +35,7 @@ exports["getGodelOtpRules'"] = function() {
 
 exports["getSmsReadPermission'"] = function () {
   try {
-    var data = DUIGatekeeper.checkReadSMSPermission();
+    var data = JBridge.checkReadSMSPermission();
     var permissions = JSON.parse(data);
     if(permissions["READ_SMS"] === true && permissions["RECEIVE_SMS"] === true) {
       return true
@@ -63,7 +63,7 @@ exports["requestSmsReadPermission'"] = function(callback) {
         callback(false)();
       }
     });
-    DUIGatekeeper.requestPermission(["android.permission.READ_SMS", "android.permission.RECEIVE_SMS"], 10, cb);
+    JBridge.requestPermission(["android.permission.READ_SMS", "android.permission.RECEIVE_SMS"], 10, cb);
   }
 }
 
@@ -72,22 +72,22 @@ exports.startSmsReceiver = function (success) {
     var cb = callbackMapper.map(function(data) {
       success(data)();
     });
-    DUIGatekeeper.attach("SMS_RECEIVE","{}",cb);
+    JBridge.attach("SMS_RECEIVE","{}",cb);
   }
 };
 
 exports.stopSmsReceiver = function () {
-  DUIGatekeeper.detach(["SMS_RECEIVE"]);
+  JBridge.detach(["SMS_RECEIVE"]);
 };
 
 exports.readSms = function (time) {
   return function() {
-    return DUIGatekeeper.fetchFromInbox(time);
+    return JBridge.fetchFromInbox(time);
   }
 };
 
 exports.md5Hash = function (s) {
-  return DUIGatekeeper.getMd5(s);
+  return JBridge.getMd5(s);
 };
 
 exports.trackException = function (label) {
