@@ -4,10 +4,11 @@ import Prelude
 
 import Control.Monad.Error.Class (throwError)
 import Control.Monad.Except (runExcept)
-import Data.Array (catMaybes, length)
+import Data.Array (catMaybes)
+import Data.Array.NonEmpty (fromArray, toArray)
 import Data.Either (either)
 import Data.Generic.Rep.Show (genericShow)
-import Data.Maybe (Maybe(..))
+import Data.Maybe (Maybe(..), maybe)
 import Data.String (joinWith)
 import Effect (Effect)
 import Effect.Aff (Aff, Milliseconds(..), runAff_)
@@ -41,14 +42,14 @@ example = do
   permissionGranted <- requestSmsReadPermission
   clipboardSupported <- liftEffect isClipboardSupported
   consentAPISupported <- liftEffect isConsentAPISupported
-  let smsReaders = catMaybes [
+  let mSmsReaders = fromArray $ catMaybes [
                     if permissionGranted then Just smsReceiver else Nothing,
                     if permissionGranted then Just poller else Nothing,
                     if not permissionGranted && clipboardSupported then Just clipboard else Nothing,
                     if not permissionGranted && consentAPISupported then Just smsConsentAPI else Nothing
                   ]
-  if length smsReaders < 1 then throwError $ error "No supported methods for SMS reading" else pure unit
-  log $ "Using SMS Readers: " <> joinWith "," (getName <$> smsReaders)
+  smsReaders <- maybe (throwError $ error "No supported methods for SMS reading") pure mSmsReaders
+  log $ "Using SMS Readers: " <> joinWith "," (getName <$> toArray smsReaders)
 
   -- Create an OTP listener and set the OTP rules
   otpListener <- getOtpListener smsReaders

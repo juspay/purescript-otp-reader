@@ -12,6 +12,7 @@ module Juspay.OTP.Reader.Flow (
 
 import Prelude
 
+import Data.Array.NonEmpty (NonEmptyArray)
 import Effect (Effect)
 import Effect.Aff (Aff, Milliseconds)
 import Effect.Class (liftEffect)
@@ -69,7 +70,7 @@ type OtpListener = {
 -- | supplied `SmsReader`s  by running them in parallel to capture any incoming
 -- | SMSs and attempts to extract an OTP from them using given OTP rules. Check
 -- | the `OtpListener` type for more info on how to get OTPs and set OTP rules.
-getOtpListener :: Array SmsReader -> Flow OtpListener
+getOtpListener :: NonEmptyArray SmsReader -> Flow OtpListener
 getOtpListener readers = do
   listener <- doAff' $ O.getOtpListener readers
   pure {

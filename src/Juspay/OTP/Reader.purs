@@ -26,7 +26,7 @@ import Control.Monad.Except.Trans (ExceptT(..), runExceptT)
 import Control.Monad.Trans.Class (lift)
 import Control.Parallel (parallel, sequential)
 import Data.Array (catMaybes, elem, filter, filterA, findMap, length, null, singleton)
-import Data.Array.NonEmpty ((!!))
+import Data.Array.NonEmpty (NonEmptyArray, (!!))
 import Data.Either (Either(..), either, hush)
 import Data.Foldable (class Foldable, oneOf)
 import Data.Generic.Rep (class Generic)
@@ -309,7 +309,7 @@ type OtpM a = ExceptT OtpError Aff a
 -- | supplied `SmsReader`s  by running them in parallel to capture any incoming
 -- | SMSs and attempts to extract an OTP from them using given OTP rules. Check
 -- | the `OtpListener` type for more info on how to get OTPs and set OTP rules.
-getOtpListener :: Array SmsReader -> Aff OtpListener
+getOtpListener :: NonEmptyArray SmsReader -> Aff OtpListener
 getOtpListener readers = do
   otpRulesVar <- AVar.empty
   unprocessedSmsVar <- AVar.new []
@@ -337,7 +337,7 @@ getOtpListener readers = do
     oneOfAff :: forall f a. (Foldable f) => (Functor f) => f (Aff a) -> Aff a
     oneOfAff affs = sequential $ oneOf $ parallel <$> affs
 
-    waitForSms :: Array SmsReader -> Aff (Either OtpError (Array ReceivedSms))
+    waitForSms :: NonEmptyArray SmsReader -> Aff (Either OtpError (Array ReceivedSms))
     waitForSms smsReaders = oneOfAff $ smsReaders <#> (\reader@(SmsReader _ r) -> do
         res <- r
         pure $ case res of
