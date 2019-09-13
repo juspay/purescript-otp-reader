@@ -210,7 +210,7 @@ an OTP returned if any of them match any rule.
 #### `getOtpListener`
 
 ``` purescript
-getOtpListener :: Array SmsReader -> Aff OtpListener
+getOtpListener :: NonEmptyArray SmsReader -> Aff OtpListener
 ```
 
 Takes an array of `SmsReader`s and returns functions to get OTPs. It uses the

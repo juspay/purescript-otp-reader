@@ -65,7 +65,7 @@ type OtpListener = { getNextOtp :: Flow Otp, setOtpRules :: Array OtpRule -> Flo
 #### `getOtpListener`
 
 ``` purescript
-getOtpListener :: Array SmsReader -> Flow OtpListener
+getOtpListener :: NonEmptyArray SmsReader -> Flow OtpListener
 ```
 
 Flow version of `getSmsReadPermission` from Juspay.OTP.Reader
