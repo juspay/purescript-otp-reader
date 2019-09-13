@@ -1,6 +1,17 @@
-All versions and their changelogs. The version names are git tags. So if you want to checkout that version's commit, checkout the tag with that name (eg: `git checkout v0.2`).
+All versions and their changelogs. The version names are git tags. So if you want to checkout that version's commit, checkout the tag with that name (eg: `git checkout v0.4`).
 
 For a given `vX.X` tag, there might be a `vX.X-purs11` tag which is the same version but in PureScript version 11 in case you need it.
+
+## v0.4 / v0.4-purs11
+
+Features:
+
+* Made `getOtpListner` take a `NonEmptyArray` of `SmsReader`s instead of an `Array`
+
+Dependency URL:
+
+* https://bitbucket.org/juspay/purescript-otp-reader.git#v0.4
+* https://bitbucket.org/juspay/purescript-otp-reader.git#v0.4-purs11
 
 ## v0.3 / v0.3-purs11
 
