@@ -215,7 +215,7 @@ smsPoller startTime frequency = do
     getNextSms :: Ref (Array String) -> Aff (Either Error (Array Sms))
     getNextSms processedRef = do
       delay frequency
-      smsString <- liftEffect $ readSms $ show (unwrap startTime)
+      smsString <- liftEffect $ readSms $ encodeJSON (unwrap startTime)
       processed <- liftEffect $ Ref.read processedRef
       let sms = filter (notProcessed processed) $ (decodeAndTrack >>> hush >>> fromMaybe []) smsString
       liftEffect $ Ref.write (processed <> (hashSms <$> sms)) processedRef
