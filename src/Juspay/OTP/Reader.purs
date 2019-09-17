@@ -311,14 +311,21 @@ type OtpM a = ExceptT OtpError Aff a
 -- | the `OtpListener` type for more info on how to get OTPs and set OTP rules.
 getOtpListener :: NonEmptyArray SmsReader -> Aff OtpListener
 getOtpListener readers = do
-  otpRulesVar <- AVar.empty
-  unprocessedSmsVar <- AVar.new []
+  otpRulesVar <- AVar.empty -- The OTP rules to be used. Empty at first until `setOtpRules` is called for the first time
+  unprocessedSmsVar <- AVar.new [] -- Accumulates any SMSs that arrive before OTP rules are set (so they can be processed once it's set)
 
   let
     setOtpRules rules = AVar.tryTake otpRulesVar *> AVar.put rules otpRulesVar
 
     getNextOtp = do
       otpRulesSet <- isOtpRulesSet otpRulesVar
+      {--
+      If the otp rules have already been set (ie, `setOtpRules` was called once before `getNextOtp`),
+      start waiting for SMSs to arrive and process them for OTPs. If otp rules haven't been
+      set yet, do 2 things in parallel:
+        1. Listen for SMSs but don't process them for OTPs just yet. Queue them up instead.
+        2. Wait for otp rules to be set. When it's set, start processinng those queued up SMSs from (1.)
+      --}
       smsList <- if otpRulesSet
           then ExceptT $ waitForSms readers
           else ExceptT $ oneOfAff [
@@ -334,9 +341,11 @@ getOtpListener readers = do
     setOtpRules
   }
   where
+    -- Take a set of Affs, run them in parallel and return the first one that succeeds
     oneOfAff :: forall f a. (Foldable f) => (Functor f) => f (Aff a) -> Aff a
     oneOfAff affs = sequential $ oneOf $ parallel <$> affs
 
+    -- Take an Array of SmsReaders, start them all in parallel and return the response of the first one that succeeds (or fails)
     waitForSms :: NonEmptyArray SmsReader -> Aff (Either OtpError (Array ReceivedSms))
     waitForSms smsReaders = oneOfAff $ smsReaders <#> (\reader@(SmsReader _ r) -> do
         res <- r
@@ -345,6 +354,7 @@ getOtpListener readers = do
           Right smses -> Right $ (\sms -> ReceivedSms sms reader) <$> smses
       )
 
+    -- Used to wait for otp rules to be set for the first time (by `OtpListener.setOtpRules`)
     waitForOtpRules :: AVar (Array OtpRule) -> Aff (Array OtpRule)
     waitForOtpRules otpRulesVar = AVar.read otpRulesVar
 
@@ -421,6 +431,7 @@ matchAndExtract :: OtpRule -> Sms -> Maybe String
 matchAndExtract (OtpRule rule) sms =
   matchSender sms >>= matchMessage >>= extract
   where
+    -- Succeeds if the SMS's 'from' matches any one of the 'from's in the OTP rule (or if the SMS's 'from' is "UNKNOWN_BANK")
     matchSender :: Sms -> Maybe Sms
     matchSender (Sms sms') =
       let
@@ -429,6 +440,7 @@ matchAndExtract (OtpRule rule) sms =
         fromRetrieverApi = sms'.from == "UNKNOWN_BANK"
       in if matches || fromRetrieverApi then Just (Sms sms') else Nothing
 
+    -- Succeeds if the SMS's body matches the body regex in the OTP rule
     matchMessage :: Sms -> Maybe Sms
     matchMessage (Sms sms') =
       let
@@ -436,6 +448,7 @@ matchAndExtract (OtpRule rule) sms =
         matchesOtp = isJust $ makeRegex ("^" <> rule.otp <> "$") >>= (\r -> match r sms'.body) -- if the whole message body is the OTP (like from clipboard)
       in if matchesBody || matchesOtp then Just (Sms sms') else Nothing
 
+    -- Attempt to extract the OTP from the SMS body using the otp regex in the OTP rule
     extract :: Sms -> Maybe String
     extract (Sms sms') =
       let
@@ -443,6 +456,7 @@ matchAndExtract (OtpRule rule) sms =
         otp = join $ makeRegex rule.otp >>= (\r -> match r sms'.body) >>= (\arr -> arr !! group)
       in otp
 
+    -- Helper function to attempt creating a regex from a given string
     makeRegex :: String -> Maybe Regex
     makeRegex s = case regex s (ignoreCase) of
       Right r -> Just r
