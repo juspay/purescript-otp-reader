@@ -102,7 +102,7 @@ exports.isConsentAPISupported = function() {
   try {
     // User consent API was added along with androidX migration in godel-core
     var usingAndroidX = JBridge.getResourceByName("using_androidx");
-    return usingAndroidX
+    return usingAndroidX === "true";
   } catch(e) {
     return false;
   }

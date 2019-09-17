@@ -34,6 +34,7 @@ import Data.Generic.Rep (class Generic)
 import Data.Maybe (Maybe(..), fromMaybe, isJust, maybe)
 import Data.Newtype (class Newtype, unwrap, wrap)
 import Data.Number (fromString)
+import Data.Ord (greaterThan)
 import Data.String.Regex (Regex, match, regex)
 import Data.String.Regex.Flags (ignoreCase)
 import Data.Time.Duration (Milliseconds(..))
@@ -203,6 +204,7 @@ smsReceiver = SmsReader "SMS_RECEIVER" (runExceptT getNextSms)
 foreign import readSms :: String -> (Error -> Either Error String)
   -> (String -> Either Error String) -> Effect (Either Error String)
 foreign import md5Hash :: String -> String
+foreign import getCurrentTime :: Effect Number
 
 -- | Capture incoming SMSs by polling the SMS inbox at regular intervals. The
 -- | first argument specifies the earliest time from which SMSs should be read
@@ -218,9 +220,12 @@ smsPoller startTime frequency = do
     getNextSms :: Ref (Array String) -> ExceptT Error Aff (Array Sms)
     getNextSms processedRef = do
       lift $ delay frequency
-      smsString <- ExceptT $ liftEffect $ readSms (show (unwrap startTime)) Left Right
+      smsString <- ExceptT $ liftEffect $ readSms (encodeJSON (unwrap startTime)) Left Right
       processed <- liftEffect $ Ref.read processedRef
-      let sms = filter (notProcessed processed) $ (decodeAndTrack >>> hush >>> fromMaybe []) smsString
+      currentTime <- Milliseconds <$> liftEffect getCurrentTime
+      let sms = filter (notProcessed processed)
+            $ filter (notFutureSms currentTime)
+            $ (decodeAndTrack >>> hush >>> fromMaybe []) smsString
       liftEffect $ Ref.write (processed <> (hashSms <$> sms)) processedRef
       if length sms < 1
         then getNextSms processedRef
@@ -234,6 +239,9 @@ smsPoller startTime frequency = do
 
     notProcessed :: Array String -> Sms -> Boolean
     notProcessed processed sms = not $ elem (hashSms sms) processed
+
+    notFutureSms :: Milliseconds -> Sms -> Boolean
+    notFutureSms currentTime sms = fromMaybe true $ (greaterThan currentTime) <$> getSmsTime sms
 
 
 
@@ -265,7 +273,6 @@ smsConsentAPI = SmsReader "SMS_CONSENT" (runExceptT getNextSms)
 
 foreign import onClipboardChange :: (Either Error String -> Effect Unit)
   -> (Error -> Either Error String) -> (String -> Either Error String) -> Effect Unit
-foreign import getCurrentTime :: Effect Number
 
 
 -- | Check if the JBridge functions for Clipboard are available.
@@ -315,14 +322,21 @@ type OtpM a = ExceptT OtpError Aff a
 -- | the `OtpListener` type for more info on how to get OTPs and set OTP rules.
 getOtpListener :: NonEmptyArray SmsReader -> Aff OtpListener
 getOtpListener readers = do
-  otpRulesVar <- AVar.empty
-  unprocessedSmsVar <- AVar.new []
+  otpRulesVar <- AVar.empty -- The OTP rules to be used. Empty at first until `setOtpRules` is called for the first time
+  unprocessedSmsVar <- AVar.new [] -- Accumulates any SMSs that arrive before OTP rules are set (so they can be processed once it's set)
 
   let
     setOtpRules rules = AVar.tryTake otpRulesVar *> AVar.put rules otpRulesVar
 
     getNextOtp = do
       otpRulesSet <- isOtpRulesSet otpRulesVar
+      {--
+      If the otp rules have already been set (ie, `setOtpRules` was called once before `getNextOtp`),
+      start waiting for SMSs to arrive and process them for OTPs. If otp rules haven't been
+      set yet, do 2 things in parallel:
+        1. Listen for SMSs but don't process them for OTPs just yet. Queue them up instead.
+        2. Wait for otp rules to be set. When it's set, start processinng those queued up SMSs from (1.)
+      --}
       smsList <- if otpRulesSet
           then ExceptT $ waitForSms readers
           else ExceptT $ oneOfAff [
@@ -338,9 +352,11 @@ getOtpListener readers = do
     setOtpRules
   }
   where
+    -- Take a set of Affs, run them in parallel and return the first one that succeeds
     oneOfAff :: forall f a. (Foldable f) => (Functor f) => f (Aff a) -> Aff a
     oneOfAff affs = sequential $ oneOf $ parallel <$> affs
 
+    -- Take an Array of SmsReaders, start them all in parallel and return the response of the first one that succeeds (or fails)
     waitForSms :: NonEmptyArray SmsReader -> Aff (Either OtpError (Array ReceivedSms))
     waitForSms smsReaders = oneOfAff $ smsReaders <#> (\reader@(SmsReader _ r) -> do
         res <- r
@@ -349,6 +365,7 @@ getOtpListener readers = do
           Right smses -> Right $ (\sms -> ReceivedSms sms reader) <$> smses
       )
 
+    -- Used to wait for otp rules to be set for the first time (by `OtpListener.setOtpRules`)
     waitForOtpRules :: AVar (Array OtpRule) -> Aff (Array OtpRule)
     waitForOtpRules otpRulesVar = AVar.read otpRulesVar
 
@@ -425,6 +442,7 @@ matchAndExtract :: OtpRule -> Sms -> Maybe String
 matchAndExtract (OtpRule rule) sms =
   matchSender sms >>= matchMessage >>= extract
   where
+    -- Succeeds if the SMS's 'from' matches any one of the 'from's in the OTP rule (or if the SMS's 'from' is "UNKNOWN_BANK")
     matchSender :: Sms -> Maybe Sms
     matchSender (Sms sms') =
       let
@@ -433,6 +451,7 @@ matchAndExtract (OtpRule rule) sms =
         fromRetrieverApi = sms'.from == "UNKNOWN_BANK"
       in if matches || fromRetrieverApi then Just (Sms sms') else Nothing
 
+    -- Succeeds if the SMS's body matches the body regex in the OTP rule
     matchMessage :: Sms -> Maybe Sms
     matchMessage (Sms sms') =
       let
@@ -440,6 +459,7 @@ matchAndExtract (OtpRule rule) sms =
         matchesOtp = isJust $ makeRegex ("^" <> rule.otp <> "$") >>= (\r -> match r sms'.body) -- if the whole message body is the OTP (like from clipboard)
       in if matchesBody || matchesOtp then Just (Sms sms') else Nothing
 
+    -- Attempt to extract the OTP from the SMS body using the otp regex in the OTP rule
     extract :: Sms -> Maybe String
     extract (Sms sms') =
       let
@@ -447,6 +467,7 @@ matchAndExtract (OtpRule rule) sms =
         otp = join $ makeRegex rule.otp >>= (\r -> match r sms'.body) >>= (\arr -> arr !! group)
       in otp
 
+    -- Helper function to attempt creating a regex from a given string
     makeRegex :: String -> Maybe Regex
     makeRegex s = case regex s (ignoreCase) of
       Right r -> Just r
