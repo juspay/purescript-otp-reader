@@ -21,6 +21,7 @@ module Juspay.OTP.Reader (
 
 import Prelude
 
+import Control.Monad.Error.Class (throwError)
 import Control.Monad.Except (runExcept)
 import Control.Monad.Except.Trans (ExceptT(..), runExceptT)
 import Control.Monad.Trans.Class (lift)
@@ -179,26 +180,28 @@ requestSmsReadPermission = makeAff (\cb -> requestSmsReadPermission' (Right >>> 
 
 
 
-foreign import startSmsReceiver :: (String -> Effect Unit) -> Effect Unit
+foreign import startSmsReceiver :: (Either Error String -> Effect Unit)
+  -> (Error -> Either Error String) -> (String -> Either Error String) -> Effect Unit
 foreign import stopSmsReceiver :: Effect Unit
 
 -- | Capture incoming SMSs by registering an Android Broadcast Receiver for
 -- | SMS_RECEIVED action. This requires SMS permission to work.
 -- | Calling `getName` on this will return the string "SMS_RECEIVER".
 smsReceiver :: SmsReader
-smsReceiver = SmsReader "SMS_RECEIVER" getNextSms
+smsReceiver = SmsReader "SMS_RECEIVER" (runExceptT getNextSms)
   where
-  getNextSms :: Aff (Either Error (Array Sms))
+  getNextSms :: ExceptT Error Aff (Array Sms)
   getNextSms = do
-    smsString <- makeAff (\cb -> startSmsReceiver (Right >>> cb) *> pure (effectCanceler stopSmsReceiver))
+    smsString <- ExceptT $ makeAff (\cb -> startSmsReceiver (Right >>> cb) Left Right *> pure (effectCanceler stopSmsReceiver))
     let sms = (decodeAndTrack >>> hush >>> maybe [] identity) smsString
     if length sms < 1
       then getNextSms
-      else pure $ Right sms
+      else pure sms
 
 
 
-foreign import readSms :: String -> Effect String
+foreign import readSms :: String -> (Error -> Either Error String)
+  -> (String -> Either Error String) -> Effect (Either Error String)
 foreign import md5Hash :: String -> String
 
 -- | Capture incoming SMSs by polling the SMS inbox at regular intervals. The
@@ -210,18 +213,18 @@ foreign import md5Hash :: String -> String
 smsPoller :: Milliseconds -> Milliseconds -> Effect SmsReader
 smsPoller startTime frequency = do
   processedRef <- Ref.new []
-  pure $ SmsReader "SMS_POLLER" $ getNextSms processedRef
+  pure $ SmsReader "SMS_POLLER" $ (runExceptT $ getNextSms processedRef)
   where
-    getNextSms :: Ref (Array String) -> Aff (Either Error (Array Sms))
+    getNextSms :: Ref (Array String) -> ExceptT Error Aff (Array Sms)
     getNextSms processedRef = do
-      delay frequency
-      smsString <- liftEffect $ readSms $ show (unwrap startTime)
+      lift $ delay frequency
+      smsString <- ExceptT $ liftEffect $ readSms (show (unwrap startTime)) Left Right
       processed <- liftEffect $ Ref.read processedRef
       let sms = filter (notProcessed processed) $ (decodeAndTrack >>> hush >>> fromMaybe []) smsString
       liftEffect $ Ref.write (processed <> (hashSms <$> sms)) processedRef
       if length sms < 1
         then getNextSms processedRef
-        else do pure $ Right sms
+        else pure sms
 
     getSmsTime :: Sms -> Maybe Milliseconds
     getSmsTime (Sms sms) = Milliseconds <$> fromString sms.time
@@ -234,7 +237,8 @@ smsPoller startTime frequency = do
 
 
 
-foreign import startSmsConsentAPI :: (String -> Effect Unit) -> Effect Unit
+foreign import startSmsConsentAPI :: (Either Error String -> Effect Unit)
+  -> (Error -> Either Error String) -> (String -> Either Error String) -> Effect Unit
 foreign import stopSmsConsentAPI :: Effect Unit
 
 -- | Check if User Consent API functions are available
@@ -245,22 +249,22 @@ foreign import isConsentAPISupported :: Effect Boolean
 -- | else it will throw an error immediately
 -- | Calling `getName` on this will return the string "SMS_CONSENT".
 smsConsentAPI :: SmsReader
-smsConsentAPI = SmsReader "SMS_CONSENT" getNextSms
+smsConsentAPI = SmsReader "SMS_CONSENT" (runExceptT getNextSms)
   where
-  getNextSms :: Aff (Either Error (Array Sms))
+  getNextSms :: ExceptT Error Aff (Array Sms)
   getNextSms = do
     consentAPISupported <- liftEffect isConsentAPISupported
-    if not consentAPISupported then pure $ Left $ error "User Consent API is not available"
-      else do
-        smsString <- makeAff (\cb -> startSmsConsentAPI (Right >>> cb) *> pure (effectCanceler stopSmsReceiver))
-        let sms = (decodeAndTrack >>> hush >>> maybe [] singleton) smsString
-        if length sms < 1
-          then getNextSms
-          else pure $ Right sms
+    if not consentAPISupported then throwError $ error "User Consent API is not available" else pure unit
+    smsString <- ExceptT $ makeAff (\cb -> startSmsConsentAPI (Right >>> cb) Left Right *> pure (effectCanceler stopSmsReceiver))
+    let sms = (decodeAndTrack >>> hush >>> maybe [] singleton) smsString
+    if length sms < 1
+      then getNextSms
+      else pure sms
 
 
 
-foreign import onClipboardChange :: (String -> Effect Unit) -> Effect Unit
+foreign import onClipboardChange :: (Either Error String -> Effect Unit)
+  -> (Error -> Either Error String) -> (String -> Either Error String) -> Effect Unit
 foreign import getCurrentTime :: Effect Number
 
 
@@ -274,20 +278,20 @@ foreign import isClipboardSupported :: Effect Boolean
 -- | else it will immediately throw an Error
 -- | Calling `getName` on this will return the string "CLIPBOARD"
 clipboard :: SmsReader
-clipboard = SmsReader "CLIPBOARD" getNextSms
+clipboard = SmsReader "CLIPBOARD" (runExceptT getNextSms)
   where
-    getNextSms :: Aff (Either Error (Array Sms))
+    getNextSms :: ExceptT Error Aff (Array Sms)
     getNextSms = do
       clipboardSupported <- liftEffect $ isClipboardSupported
-      if not clipboardSupported then pure $ Left $ error "Clipboard API not available"
-        else do
-          smsString <- makeAff (\cb -> onClipboardChange (Right >>> cb) *> pure nonCanceler)
-          currentTime <- liftEffect getCurrentTime
-          let stringArray = (decodeAndTrack >>> hush >>> maybe [] identity) smsString
-              sms = toSms currentTime <$> stringArray
-          if length sms < 1
-            then getNextSms
-            else pure $ Right sms
+      if not clipboardSupported then throwError $ error "Clipboard API not available" else pure unit
+      smsString <- ExceptT $ makeAff (\cb -> onClipboardChange (Right >>> cb) Left Right *> pure nonCanceler)
+      currentTime <- liftEffect getCurrentTime
+      let stringArray = (decodeAndTrack >>> hush >>> maybe [] identity) smsString
+          sms = toSms currentTime <$> stringArray
+      if length sms < 1
+        then getNextSms
+        else pure sms
+
     toSms :: Number -> String -> Sms
     toSms time body = Sms {
       from: "UNKNOWN_BANK",

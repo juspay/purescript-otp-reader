@@ -65,5 +65,5 @@ otpLoop listener = do
   res <- listener.getNextOtp -- blocks until an HDFC OTP is received
   case res of
     Otp otp sms reader -> log $ "OTP received from " <> getName reader <> ": " <> otp <> "\nSMS: " <> genericShow sms
-    Error err -> logShow err
+    Error err -> throwError $ error $ show err
   otpLoop listener
