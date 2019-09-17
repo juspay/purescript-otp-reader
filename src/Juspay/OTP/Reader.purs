@@ -33,6 +33,7 @@ import Data.Generic.Rep (class Generic)
 import Data.Maybe (Maybe(..), fromMaybe, isJust, maybe)
 import Data.Newtype (class Newtype, unwrap, wrap)
 import Data.Number (fromString)
+import Data.Ord (greaterThan)
 import Data.String.Regex (Regex, match, regex)
 import Data.String.Regex.Flags (ignoreCase)
 import Data.Time.Duration (Milliseconds(..))
@@ -200,6 +201,7 @@ smsReceiver = SmsReader "SMS_RECEIVER" getNextSms
 
 foreign import readSms :: String -> Effect String
 foreign import md5Hash :: String -> String
+foreign import getCurrentTime :: Effect Number
 
 -- | Capture incoming SMSs by polling the SMS inbox at regular intervals. The
 -- | first argument specifies the earliest time from which SMSs should be read
@@ -215,9 +217,12 @@ smsPoller startTime frequency = do
     getNextSms :: Ref (Array String) -> Aff (Either Error (Array Sms))
     getNextSms processedRef = do
       delay frequency
-      smsString <- liftEffect $ readSms $ show (unwrap startTime)
+      smsString <- liftEffect $ readSms $ encodeJSON (unwrap startTime)
       processed <- liftEffect $ Ref.read processedRef
-      let sms = filter (notProcessed processed) $ (decodeAndTrack >>> hush >>> fromMaybe []) smsString
+      currentTime <- Milliseconds <$> liftEffect getCurrentTime
+      let sms = filter (notProcessed processed)
+            $ filter (notFutureSms currentTime)
+            $ (decodeAndTrack >>> hush >>> fromMaybe []) smsString
       liftEffect $ Ref.write (processed <> (hashSms <$> sms)) processedRef
       if length sms < 1
         then getNextSms processedRef
@@ -231,6 +236,9 @@ smsPoller startTime frequency = do
 
     notProcessed :: Array String -> Sms -> Boolean
     notProcessed processed sms = not $ elem (hashSms sms) processed
+
+    notFutureSms :: Milliseconds -> Sms -> Boolean
+    notFutureSms currentTime sms = fromMaybe true $ (greaterThan currentTime) <$> getSmsTime sms
 
 
 
@@ -261,7 +269,6 @@ smsConsentAPI = SmsReader "SMS_CONSENT" getNextSms
 
 
 foreign import onClipboardChange :: (String -> Effect Unit) -> Effect Unit
-foreign import getCurrentTime :: Effect Number
 
 
 -- | Check if the JBridge functions for Clipboard are available.
