@@ -50,34 +50,52 @@ exports["getSmsReadPermission'"] = function () {
 
 exports["requestSmsReadPermission'"] = function(callback) {
   return function() {
-    var cb = callbackMapper.map(function(params) {
-      var permissions = JSON.parse(params);
-      try {
-        if(permissions["READ_SMS"] === true && permissions["RECEIVE_SMS"] === true) {
-          callback(true)();
-        } else {
+    try {
+      var cb = callbackMapper.map(function(params) {
+        try {
+          var permissions = JSON.parse(params);
+          if(permissions["READ_SMS"] === true && permissions["RECEIVE_SMS"] === true) {
+            callback(true)();
+          } else {
+            callback(false)();
+          }
+        } catch(e) {
+          //TODO track this
           callback(false)();
         }
-      } catch(e) {
-        //TODO track this
-        callback(false)();
-      }
-    });
-    JBridge.requestPermission(["android.permission.READ_SMS", "android.permission.RECEIVE_SMS"], 10, cb);
+      });
+      JBridge.requestPermission(["android.permission.READ_SMS", "android.permission.RECEIVE_SMS"], 10, cb);
+    } catch(e) {
+      //TODO track this
+      callback(false)();
+    }
   }
 }
 
 exports.startSmsReceiver = function (callback) {
-  return function() {
-    var cb = callbackMapper.map(function(data) {
-      callback(data)();
-    });
-    JBridge.attach("SMS_RECEIVE","{}",cb);
+  return function(left) {
+    return function(right) {
+      return function() {
+        try {
+          var cb = callbackMapper.map(function(data) {
+            callback(right(data))();
+          });
+          JBridge.attach("SMS_RECEIVE","{}",cb);
+        } catch(e) {
+          //TODO track this
+          setTimeout(function() { callback(left(e))(); }, 0);
+        }
+      }
+    }
   }
 };
 
 exports.stopSmsReceiver = function () {
-  JBridge.detach(["SMS_RECEIVE"]);
+  try {
+    JBridge.detach(["SMS_RECEIVE"]);
+  } catch(e) {
+    //TODO track this
+  }
 };
 
 exports.isConsentAPISupported = function() {
@@ -91,21 +109,43 @@ exports.isConsentAPISupported = function() {
 }
 
 exports.startSmsConsentAPI = function (callback) {
-  return function() {
-    var cb = callbackMapper.map(function(data) {
-      callback(data)();
-    });
-    JBridge.attach("SMS_CONSENT","{}",cb);
+  return function(left) {
+    return function(right) {
+      return function() {
+        try {
+          var cb = callbackMapper.map(function(data) {
+            callback(right(data))();
+          });
+          JBridge.attach("SMS_CONSENT","{}",cb);
+        } catch(e) {
+          //TODO track this
+          setTimeout(function() { callback(left(e))(); }, 0);
+        }
+      }
+    }
   }
 };
 
 exports.stopSmsConsentAPI = function () {
-  JBridge.detach(["SMS_CONSENT"]);
+  try {
+    JBridge.detach(["SMS_CONSENT"]);
+  } catch(e) {
+    //TODO track this
+  }
 };
 
 exports.readSms = function (time) {
-  return function() {
-    return JBridge.fetchFromInbox(time);
+  return function(left) {
+    return function(right) {
+      return function() {
+        try {
+          return right(JBridge.fetchFromInbox(time));
+        } catch(e) {
+          //TODO track this
+          return left(e);
+        }
+      }
+    }
   }
 };
 
@@ -118,11 +158,20 @@ exports.isClipboardSupported = function() {
 }
 
 exports.onClipboardChange = function(callback) {
-  return function() {
-    var cb = callbackMapper.map(function(s) {
-      callback(s)();
-    })
-    JBridge.onClipboardChange(cb);
+  return function(left) {
+    return function(right) {
+      return function() {
+        try {
+          var cb = callbackMapper.map(function(s) {
+            callback(right(s))();
+          })
+          JBridge.onClipboardChange(cb);
+        } catch(e) {
+          //TODO track this
+          setTimeout(function() { callback(left(e))(); }, 0);
+        }
+      }
+    }
   }
 }
 
