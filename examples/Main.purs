@@ -13,9 +13,9 @@ import Data.String (joinWith)
 import Effect (Effect)
 import Effect.Aff (Aff, Milliseconds(..), runAff_)
 import Effect.Class (liftEffect)
-import Effect.Class.Console (errorShow, log, logShow)
+import Effect.Class.Console (errorShow, log)
 import Effect.Exception (error, throwException)
-import Juspay.OTP.Reader (Otp(..), OtpListener, clipboard, getGodelOtpRules, getName, getOtpListener, isClipboardSupported, isConsentAPISupported, requestSmsReadPermission, smsConsentAPI, smsPoller, smsReceiver)
+import Juspay.OTP.Reader (Otp(..), OtpListener, clipboard, getGodelOtpRules, getName, getOtpListener, isClipboardSupported, isConsentAPISupported, isConsentDeniedError, requestSmsReadPermission, smsConsentAPI, smsPoller, smsReceiver)
 
 foreign import init :: Effect Unit
 foreign import getTime :: Effect Number
@@ -64,6 +64,9 @@ otpLoop listener = do
   log "Listening for otp"
   res <- listener.getNextOtp -- blocks until an HDFC OTP is received
   case res of
-    Otp otp sms reader -> log $ "OTP received from " <> getName reader <> ": " <> otp <> "\nSMS: " <> genericShow sms
-    Error err -> throwError $ error $ show err
-  otpLoop listener
+    Otp otp sms reader -> do
+      log $ "OTP received from " <> getName reader <> ": " <> otp <> "\nSMS: " <> genericShow sms
+      otpLoop listener
+    Error err -> if isConsentDeniedError err
+      then log "OTP consent denied" *> otpLoop listener
+      else throwError $ error $ show err

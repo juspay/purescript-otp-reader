@@ -8,6 +8,7 @@ module Juspay.OTP.Reader (
     smsPoller,
     isConsentAPISupported,
     smsConsentAPI,
+    isConsentDeniedError,
     isClipboardSupported,
     clipboard,
     getSmsReadPermission,
@@ -44,7 +45,7 @@ import Effect.Aff (Aff, delay, effectCanceler, error, makeAff, nonCanceler)
 import Effect.Aff.AVar (AVar)
 import Effect.Aff.AVar as AVar
 import Effect.Class (liftEffect)
-import Effect.Exception (Error)
+import Effect.Exception (Error, message)
 import Effect.Ref (Ref)
 import Effect.Ref as Ref
 import Foreign (F, Foreign, MultipleErrors, readString)
@@ -252,6 +253,9 @@ foreign import stopSmsConsentAPI :: Effect Unit
 -- | Check if User Consent API functions are available
 foreign import isConsentAPISupported :: Effect Boolean
 
+consentDeniedErrorMessage :: String
+consentDeniedErrorMessage = "User denied consent for the SMS"
+
 -- | Capture incoming SMSs by using Android's User Consent API.
 -- | Make sure you call `isConsentAPISupported` first to check if it's supported,
 -- | else it will throw an error immediately
@@ -264,11 +268,16 @@ smsConsentAPI = SmsReader "SMS_CONSENT" (runExceptT getNextSms)
     consentAPISupported <- liftEffect isConsentAPISupported
     if not consentAPISupported then throwError $ error "User Consent API is not available" else pure unit
     smsString <- ExceptT $ makeAff (\cb -> startSmsConsentAPI (Right >>> cb) Left Right *> pure (effectCanceler stopSmsReceiver))
+    if smsString == "DENIED" then throwError $ error consentDeniedErrorMessage else pure unit
     let sms = (decodeAndTrack >>> hush >>> maybe [] singleton) smsString
     if length sms < 1
       then getNextSms
       else pure sms
 
+-- | Check if the error is because the User hit "Deny" on the SMS consent dialog
+isConsentDeniedError :: OtpError -> Boolean
+isConsentDeniedError (SmsReaderError e reader) = getName reader == "SMS_CONSENT" && message e == consentDeniedErrorMessage
+isConsentDeniedError _ = false
 
 
 foreign import onClipboardChange :: (Either Error String -> Effect Unit)

@@ -115,6 +115,14 @@ Make sure you call `isConsentAPISupported` first to check if it's supported,
 else it will throw an error immediately
 Calling `getName` on this will return the string "SMS_CONSENT".
 
+#### `isConsentDeniedError`
+
+``` purescript
+isConsentDeniedError :: OtpError -> Boolean
+```
+
+Check if the error is because the User hit "Deny" on the SMS consent dialog
+
 #### `isClipboardSupported`
 
 ``` purescript
