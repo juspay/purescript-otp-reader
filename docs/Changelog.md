@@ -1,6 +1,18 @@
-All versions and their changelogs. The version names are git tags. So if you want to checkout that version's commit, checkout the tag with that name (eg: `git checkout v0.4.1`).
+All versions and their changelogs. The version names are git tags. So if you want to checkout that version's commit, checkout the tag with that name (eg: `git checkout v0.5`).
 
 For a given `vX.X` tag, there might be a `vX.X-purs11` tag which is the same version but in PureScript version 11 in case you need it.
+
+## v0.5 / v0.5-purs11
+
+Changes:
+
+* If the user clicks "Deny" on the SMS consent dialog, `getNextOtp` now returns an error.
+* A new function `isConsentDeniedError` can be used to check if the `OtpError` returned from `getNextOtp` was because the user clicked "Deny".
+
+Dependency URL:
+
+* https://bitbucket.org/juspay/purescript-otp-reader.git#v0.5
+* https://bitbucket.org/juspay/purescript-otp-reader.git#v0.5-purs11
 
 ## v0.4.1 / v0.4.1-purs11
 
