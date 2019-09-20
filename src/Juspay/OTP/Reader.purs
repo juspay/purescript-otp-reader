@@ -267,7 +267,7 @@ smsConsentAPI = SmsReader "SMS_CONSENT" (runExceptT getNextSms)
   getNextSms = do
     consentAPISupported <- liftEffect isConsentAPISupported
     if not consentAPISupported then throwError $ error "User Consent API is not available" else pure unit
-    smsString <- ExceptT $ makeAff (\cb -> startSmsConsentAPI (Right >>> cb) Left Right *> pure (effectCanceler stopSmsReceiver))
+    smsString <- ExceptT $ makeAff (\cb -> startSmsConsentAPI (Right >>> cb) Left Right *> pure (effectCanceler stopSmsConsentAPI))
     if smsString == "DENIED" then throwError $ error consentDeniedErrorMessage else pure unit
     let sms = (decodeAndTrack >>> hush >>> maybe [] singleton) smsString
     if length sms < 1
