@@ -1,6 +1,15 @@
-All versions and their changelogs. The version names are git tags. So if you want to checkout that version's commit, checkout the tag with that name (eg: `git checkout v0.5`).
+All versions and their changelogs. The version names are git tags. So if you want to checkout that version's commit, checkout the tag with that name (eg: `git checkout v0.5.1`).
 
 For a given `vX.X` tag, there might be a `vX.X-purs11` tag which is the same version but in PureScript version 11 in case you need it.
+
+## v0.5.1 / v0.5.1-purs11
+
+* Fixed Consent API's Aff canceller.
+
+Dependency URL:
+
+* https://bitbucket.org/juspay/purescript-otp-reader.git#v0.5.1
+* https://bitbucket.org/juspay/purescript-otp-reader.git#v0.5.1-purs11
 
 ## v0.5 / v0.5-purs11
 
