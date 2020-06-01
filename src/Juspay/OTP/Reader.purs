@@ -53,6 +53,8 @@ import Foreign (F, Foreign, MultipleErrors, readString)
 import Foreign.Class (class Decode, class Encode, decode)
 import Foreign.Generic (decodeJSON, defaultOptions, encodeJSON, genericDecode, genericEncode)
 import Foreign.Index (readProp)
+import Effect.Class (liftEffect)
+import Tracker (trackEventInfoFlow, trackEvent)
 
 
 -- | Type representing an SMS received using any `SmsReader`s.
@@ -177,7 +179,10 @@ foreign import getSmsReadPermission' :: Effect Boolean
 
 -- | Checks if Android SMS Read permission has been granted
 getSmsReadPermission :: Effect Boolean
-getSmsReadPermission = liftEffect $ getSmsReadPermission'
+getSmsReadPermission = do
+  a <- liftEffect $ getSmsReadPermission'
+  _ <-trackEvent "sms_Read_Permission" (show a)
+  pure a
 
 
 
@@ -185,7 +190,9 @@ foreign import requestSmsReadPermission' :: (Boolean -> Effect Unit) -> Effect U
 
 -- | Requests Android SMS Read permission from the user
 requestSmsReadPermission :: Aff Boolean
-requestSmsReadPermission = makeAff (\cb -> requestSmsReadPermission' (Right >>> cb) *> pure nonCanceler)
+requestSmsReadPermission = do
+  _ <- liftEffect $ trackEvent "request_Sms_Read_Permission" "T"
+  makeAff (\cb -> requestSmsReadPermission' (Right >>> cb) *> pure nonCanceler)
 
 
 
@@ -201,6 +208,7 @@ smsReceiver = SmsReader "SMS_RECEIVER" (runExceptT getNextSms)
   where
   getNextSms :: ExceptT Error Aff (Array Sms)
   getNextSms = do
+    let _ = trackEvent "sms_receiver_started" "T"
     smsString <- ExceptT $ makeAff (\cb -> startSmsReceiver (Right >>> cb) Left Right *> pure (effectCanceler stopSmsReceiver))
     let sms = (decodeAndTrack >>> hush >>> maybe [] identity) smsString
     if length sms < 1
@@ -227,6 +235,7 @@ smsPoller startTime frequency = do
   where
     getNextSms :: Ref (Array String) -> ExceptT Error Aff (Array Sms)
     getNextSms processedRef = do
+      let _ = trackEvent "sms_poller_started" "T"
       lift $ delay frequency
       smsString <- ExceptT $ liftEffect $ readSms (encodeJSON (unwrap startTime)) Left Right
       processed <- liftEffect $ Ref.read processedRef
@@ -274,6 +283,7 @@ smsConsentAPI = SmsReader "SMS_CONSENT" (runExceptT getNextSms)
   getNextSms = do
     consentAPISupported <- liftEffect isConsentAPISupported
     if not consentAPISupported then throwError $ error "User Consent API is not available" else pure unit
+    let _ = trackEvent "consent_listener_started" "T"
     smsString <- ExceptT $ makeAff (\cb -> startSmsConsentAPI (Right >>> cb) Left Right *> pure (effectCanceler stopSmsConsentAPI))
     if smsString == "DENIED" then throwError $ error consentDeniedErrorMessage else pure unit
     let sms = (decodeAndTrack >>> hush >>> maybe [] singleton) smsString
@@ -307,6 +317,7 @@ clipboard = SmsReader "CLIPBOARD" (runExceptT getNextSms)
     getNextSms = do
       clipboardSupported <- liftEffect $ isClipboardSupported
       if not clipboardSupported then throwError $ error "Clipboard API not available" else pure unit
+      let _ = trackEvent "clipboard_listener_started" "T"
       smsString <- ExceptT $ makeAff (\cb -> onClipboardChange (Right >>> cb) Left Right *> pure nonCanceler)
       currentTime <- liftEffect getCurrentTime
       let stringArray = (decodeAndTrack >>> hush >>> maybe [] identity) smsString
@@ -338,6 +349,7 @@ type OtpM a = ExceptT OtpError Aff a
 -- | the `OtpListener` type for more info on how to get OTPs and set OTP rules.
 getOtpListener :: NonEmptyArray SmsReader -> Aff OtpListener
 getOtpListener readers = do
+  _ <- liftEffect $ trackEvent "otp_listener_started" "T"
   otpRulesVar <- AVar.empty -- The OTP rules to be used. Empty at first until `setOtpRules` is called for the first time
   unprocessedSmsVar <- AVar.new [] -- Accumulates any SMSs that arrive before OTP rules are set (so they can be processed once it's set)
 
@@ -345,6 +357,7 @@ getOtpListener readers = do
     setOtpRules rules = AVar.tryTake otpRulesVar *> AVar.put rules otpRulesVar
 
     getNextOtp = do
+      _ <- liftEffect $ trackEvent "get_next_otp" "T"
       otpRulesSet <- isOtpRulesSet otpRulesVar
       {--
       If the otp rules have already been set (ie, `setOtpRules` was called once before `getNextOtp`),
@@ -450,8 +463,7 @@ instance showOtpError :: Show OtpError where
 -- | Given an SMS and a list of OTP rules, it will return the first OTP
 -- | that matches one of the given rules or `Nothing` if none of them match.
 extractOtp :: Sms -> Array OtpRule -> Maybe String
-extractOtp sms rules =
-  findMap (\rule -> matchAndExtract rule sms) rules
+extractOtp sms rules = findMap (\rule -> matchAndExtract rule sms) rules
 
 
 
@@ -468,7 +480,13 @@ matchAndExtract (OtpRule rule) sms =
         senderRules = catMaybes $ makeRegex <$> rule.matches.sender
         matches = not null $ catMaybes $ (\r -> match r sms'.from) <$> senderRules
         fromRetrieverApi = sms'.from == "UNKNOWN_BANK"
-      in if matches || fromRetrieverApi then Just (Sms sms') else Nothing
+      in if matches || fromRetrieverApi 
+        then do
+          let _ = trackEvent "sender_match" "T"
+          Just (Sms sms')
+        else do
+          let _ = trackEvent "sender_match" "F"
+          Nothing
 
     -- Succeeds if the SMS's body matches the body regex in the OTP rule
     matchMessage :: Sms -> Maybe Sms
@@ -476,7 +494,13 @@ matchAndExtract (OtpRule rule) sms =
       let
         matchesBody = isJust $ makeRegex rule.matches.message >>= (\r -> match r sms'.body)
         matchesOtp = isJust $ makeRegex ("^" <> rule.otp <> "$") >>= (\r -> match r sms'.body) -- if the whole message body is the OTP (like from clipboard)
-      in if matchesBody || matchesOtp then Just (Sms sms') else Nothing
+      in if matchesBody || matchesOtp 
+        then do
+          let _ = trackEvent "message_match" "T"
+          Just (Sms sms')
+        else do
+          let _ = trackEvent "message_match" "F"
+          Nothing
 
     -- Attempt to extract the OTP from the SMS body using the otp regex in the OTP rule
     extract :: Sms -> Maybe String
