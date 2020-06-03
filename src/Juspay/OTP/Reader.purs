@@ -494,7 +494,7 @@ matchAndExtract (OtpRule rule) sms =
         senderRules = catMaybes $ makeRegex <$> rule.matches.sender
         matches = not null $ catMaybes $ (\r -> match r sms'.from) <$> senderRules
         fromRetrieverApi = sms'.from == "UNKNOWN_BANK"
-      in if matches || fromRetrieverApi then Just (Sms sms') else do Nothing
+      in if matches || fromRetrieverApi then Just (Sms sms') else Nothing
 
     -- Succeeds if the SMS's body matches the body regex in the OTP rule
     matchMessage :: Sms -> Maybe Sms
@@ -502,7 +502,7 @@ matchAndExtract (OtpRule rule) sms =
       let
         matchesBody = isJust $ makeRegex rule.matches.message >>= (\r -> match r sms'.body)
         matchesOtp = isJust $ makeRegex ("^" <> rule.otp <> "$") >>= (\r -> match r sms'.body) -- if the whole message body is the OTP (like from clipboard)
-      in if matchesBody || matchesOtp then Just (Sms sms') else do Nothing
+      in if matchesBody || matchesOtp then Just (Sms sms') else Nothing
 
     -- Attempt to extract the OTP from the SMS body using the otp regex in the OTP rule
     extract :: Sms -> Maybe String
