@@ -21,6 +21,7 @@ module Juspay.OTP.Reader (
   ) where
 
 import Prelude
+
 import Control.Monad.Error.Class (throwError)
 import Control.Monad.Except (runExcept)
 import Control.Monad.Except.Trans (ExceptT(..), runExceptT)
@@ -242,7 +243,7 @@ smsPoller startTime frequency = do
       processed <- liftEffect $ Ref.read processedRef
       currentTime <- Milliseconds <$> liftEffect getCurrentTime
       let sms = filter (notProcessed processed)
-            $ filter (notFutureSms currentTime )
+            $ filter (notFutureSms currentTime)
             $ (decodeAndTrack >>> hush >>> fromMaybe []) smsString
       _ <- if (length sms) == 0
               then pure unit
@@ -475,7 +476,8 @@ instance showOtpError :: Show OtpError where
 -- | Given an SMS and a list of OTP rules, it will return the first OTP
 -- | that matches one of the given rules or `Nothing` if none of them match.
 extractOtp :: Sms -> Array OtpRule -> Maybe String
-extractOtp sms rules = findMap (\rule -> matchAndExtract rule sms) rules
+extractOtp sms rules =
+  findMap (\rule -> matchAndExtract rule sms) rules
 
 
 
