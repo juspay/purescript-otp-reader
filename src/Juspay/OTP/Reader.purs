@@ -49,7 +49,7 @@ import Effect.Class (liftEffect)
 import Effect.Exception (Error, message)
 import Effect.Ref (Ref)
 import Effect.Ref as Ref
-import Foreign (F, Foreign, MultipleErrors, readString)
+import Foreign (F, Foreign, MultipleErrors, readString, unsafeFromForeign)
 import Foreign.Class (class Decode, class Encode, decode)
 import Foreign.Generic (decodeJSON, defaultOptions, encodeJSON, genericDecode, genericEncode)
 import Foreign.Index (readProp)
@@ -148,6 +148,7 @@ foreign import getGodelOtpRules' :: Effect Foreign
 getGodelOtpRules :: String -> Effect (F (Array OtpRule))
 getGodelOtpRules bank = do
   f <- getGodelOtpRules'
+  _ <- liftEffect $ trackEvent "godel_otp_rules" (unsafeFromForeign f)
   pure $ do
     rules <- decode f
     bankRules <- filterA (matchesBank) rules
