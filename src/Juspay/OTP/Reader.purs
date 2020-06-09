@@ -50,13 +50,12 @@ import Effect.Class (liftEffect)
 import Effect.Exception (Error, message)
 import Effect.Ref (Ref)
 import Effect.Ref as Ref
-import Foreign (F, Foreign, MultipleErrors, readString)
+import Foreign (F, Foreign, MultipleErrors, readString, unsafeToForeign)
 import Foreign.Class (class Decode, class Encode, decode)
 import Foreign.Generic (decodeJSON, defaultOptions, encodeJSON, genericDecode, genericEncode)
 import Foreign.Index (readProp)
-import Foreign (unsafeToForeign)
 
-import Tracker (trackAction, trackActionEvent, trackContextEvent) as Tracker
+import Tracker (trackActionEvent, trackContextEvent) as Tracker
 import Tracker.Labels (Label(..)) as Tracker
 import Tracker.Types (Level(..), Subcategory(..)) as Tracker
 
@@ -407,7 +406,6 @@ getOtpListener readers = do
 
     pushLogs :: OtpRule -> ReceivedSms -> Effect Unit
     pushLogs rule (ReceivedSms sms@(Sms s) reader)= do
-    -- pushLogs rule sms@(Sms s)= do
       let sender = matchSender rule sms
       let msg = matchMessage rule sms
       let otp = extract rule sms
@@ -416,18 +414,15 @@ getOtpListener readers = do
                               body : newbody,
                               time : s.time
                             }
-      _ <- if sender == Nothing
-            then liftEffect $ trackEvent "matches_sender" "false"
-            else liftEffect $ trackEvent "matches_sender" "true"
-      _ <- if msg == Nothing
-            then liftEffect $ trackEvent "match_message" "false"
-            else liftEffect $ trackEvent "match_message" "true"
-      _ <- if otp == Nothing
-            then liftEffect $ trackEvent "extract_otp" "false"
-            else liftEffect $ trackEvent "extract_otp" "true"
-      _ <- liftEffect $ trackEvent "sms" (show maskedSms)
+      let s = if sender == Nothing then "false" else "true"
+      let m = if msg == Nothing then "false" else "true"
+      let o = if otp == Nothing then "false" else "true"
+      _ <- liftEffect $ Tracker.trackActionEvent Tracker.System Tracker.Info Tracker.SMS_INFO "matches_sender" (unsafeToForeign s) "matches_sender" s
+      _ <- liftEffect $ Tracker.trackActionEvent Tracker.System Tracker.Info Tracker.SMS_INFO "match_message" (unsafeToForeign m) "match_message" m
+      _ <- liftEffect $ Tracker.trackActionEvent Tracker.System Tracker.Info Tracker.SMS_INFO "extract_otp" (unsafeToForeign o) "extract_otp" o
+      _ <- liftEffect $ Tracker.trackActionEvent Tracker.System Tracker.Info Tracker.SMS_INFO "sms" (unsafeToForeign maskedSms) "sms" (show maskedSms)
       _ <- if sender == Nothing || otp == Nothing
-            then liftEffect $ trackEvent "sms_unmatched_fly" "true"
+            then liftEffect $ Tracker.trackActionEvent Tracker.System Tracker.Info Tracker.SMS_INFO "sms_unmatched_fly" (unsafeToForeign "true") "sms_unmatched_fly" "T"
             else pure unit
       pure unit
 
