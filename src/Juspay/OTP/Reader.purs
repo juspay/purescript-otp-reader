@@ -53,8 +53,11 @@ import Foreign (F, Foreign, MultipleErrors, readString, unsafeFromForeign)
 import Foreign.Class (class Decode, class Encode, decode)
 import Foreign.Generic (decodeJSON, defaultOptions, encodeJSON, genericDecode, genericEncode)
 import Foreign.Index (readProp)
-import Tracker (trackEvent)
+import Foreign (unsafeToForeign)
 
+import Tracker (trackAction, trackActionEvent, trackContextEvent) as Tracker
+import Tracker.Labels (Label(..)) as Tracker
+import Tracker.Types (Level(..), Subcategory(..)) as Tracker
 
 -- | Type representing an SMS received using any `SmsReader`s.
 newtype Sms = Sms {
@@ -148,7 +151,6 @@ foreign import getGodelOtpRules' :: Effect Foreign
 getGodelOtpRules :: String -> Effect (F (Array OtpRule))
 getGodelOtpRules bank = do
   f <- getGodelOtpRules'
-  _ <- liftEffect $ trackEvent "godel_otp_rules" (unsafeFromForeign f)
   pure $ do
     rules <- decode f
     bankRules <- filterA (matchesBank) rules
@@ -183,7 +185,6 @@ foreign import getSmsReadPermission' :: Effect Boolean
 getSmsReadPermission :: Effect Boolean
 getSmsReadPermission = do
   a <- liftEffect $ getSmsReadPermission'
-  _ <-trackEvent "sms_Read_Permission" (show a)
   pure a
 
 
@@ -193,8 +194,14 @@ foreign import requestSmsReadPermission' :: (Boolean -> Effect Unit) -> Effect U
 -- | Requests Android SMS Read permission from the user
 requestSmsReadPermission :: Aff Boolean
 requestSmsReadPermission = do
-  _ <- liftEffect $ trackEvent "request_Sms_Read_Permission" "T"
-  makeAff (\cb -> requestSmsReadPermission' (Right >>> cb) *> pure nonCanceler)
+  a <- liftEffect $ getSmsReadPermission
+  result <- makeAff (\cb -> requestSmsReadPermission' (Right >>> cb) *> pure nonCanceler)
+  _ <- if a
+        then liftEffect $ Tracker.trackActionEvent Tracker.User Tracker.Info Tracker.SMS_INFO "sms_read_permission_granted" (unsafeToForeign result) "sms_read_permission_granted" (show result)
+        else do
+          liftEffect $ Tracker.trackActionEvent Tracker.System Tracker.Info Tracker.SMS_INFO "sms_read_permission_dialog_shown" (unsafeToForeign "true") "sms_read_permission_dialog_shown" "T"
+          liftEffect $ Tracker.trackActionEvent Tracker.User Tracker.Info Tracker.SMS_INFO "sms_read_permission_granted" (unsafeToForeign result) "sms_read_permission_granted" (show result)
+  pure result
 
 
 
@@ -210,7 +217,7 @@ smsReceiver = SmsReader "SMS_RECEIVER" (runExceptT getNextSms)
   where
   getNextSms :: ExceptT Error Aff (Array Sms)
   getNextSms = do
-    _ <- liftEffect $ trackEvent "sms_receiver_started" "T"
+    _ <- liftEffect $ Tracker.trackActionEvent Tracker.System Tracker.Info Tracker.SMS_INFO "sms_receiver_started" (unsafeToForeign "true") "sms_receiver_started" "T"
     smsString <- ExceptT $ makeAff (\cb -> startSmsReceiver (Right >>> cb) Left Right *> pure (effectCanceler stopSmsReceiver))
     let sms = (decodeAndTrack >>> hush >>> maybe [] identity) smsString
     if length sms < 1
@@ -237,9 +244,9 @@ smsPoller startTime frequency = do
   where
     getNextSms :: Ref (Array String) -> ExceptT Error Aff (Array Sms)
     getNextSms processedRef = do
-      _ <- liftEffect $ trackEvent "sms_poller_started" "T"
+      _ <- liftEffect $ Tracker.trackActionEvent Tracker.System Tracker.Info Tracker.SMS_INFO "sms_poller_started" (unsafeToForeign "true") "sms_poller_started" "T"
       lift $ delay frequency
-      _ <- liftEffect $ trackEvent "timestamp_sent_to_native" (show startTime)
+      _ <- liftEffect $ Tracker.trackActionEvent Tracker.System Tracker.Info Tracker.SMS_INFO "timestamp_sent_to_native" (unsafeToForeign startTime) "timestamp_sent_to_native" (show startTime)
       smsString <- ExceptT $ liftEffect $ readSms (encodeJSON (unwrap startTime)) Left Right
       processed <- liftEffect $ Ref.read processedRef
       currentTime <- Milliseconds <$> liftEffect getCurrentTime
@@ -249,9 +256,9 @@ smsPoller startTime frequency = do
       _ <- if (length sms) == 0
               then pure unit
               else do
-                liftEffect $ trackEvent "no_of_sms" (show $ length sms)
-                liftEffect $ trackEvent "sms_timestamps" (show (getSmsTime <$> sms))
-                liftEffect $ trackEvent "sms_sender_name" (show (getSenderName <$> sms))
+                liftEffect $ Tracker.trackContextEvent Tracker.User Tracker.Info Tracker.SMS_INFO (unsafeToForeign {"no_of_sms" : show $ length sms}) "no_of_sms" (show $ length sms)
+                liftEffect $ Tracker.trackContextEvent Tracker.User Tracker.Info Tracker.SMS_INFO (unsafeToForeign {"sms_timestamps" : (show (getSmsTime <$> sms))}) "sms_timestamps" (show (getSmsTime <$> sms))
+                liftEffect $ Tracker.trackContextEvent Tracker.User Tracker.Info Tracker.SMS_INFO (unsafeToForeign {"sms_sender_name" : (show (getSenderName <$> sms))}) "sms_sender_name" (show (getSenderName <$> sms))
       liftEffect $ Ref.write (processed <> (hashSms <$> sms)) processedRef
       if length sms < 1
         then getNextSms processedRef
@@ -295,7 +302,7 @@ smsConsentAPI = SmsReader "SMS_CONSENT" (runExceptT getNextSms)
   getNextSms = do
     consentAPISupported <- liftEffect isConsentAPISupported
     if not consentAPISupported then throwError $ error "User Consent API is not available" else pure unit
-    _ <- liftEffect $ trackEvent "consent_listener_started" "T"
+    _ <- liftEffect $ Tracker.trackActionEvent Tracker.System Tracker.Info Tracker.SMS_INFO "consent_listener_started" (unsafeToForeign "true") "consent_listener_started" "T"
     smsString <- ExceptT $ makeAff (\cb -> startSmsConsentAPI (Right >>> cb) Left Right *> pure (effectCanceler stopSmsConsentAPI))
     if smsString == "DENIED" then throwError $ error consentDeniedErrorMessage else pure unit
     let sms = (decodeAndTrack >>> hush >>> maybe [] singleton) smsString
@@ -329,7 +336,7 @@ clipboard = SmsReader "CLIPBOARD" (runExceptT getNextSms)
     getNextSms = do
       clipboardSupported <- liftEffect $ isClipboardSupported
       if not clipboardSupported then throwError $ error "Clipboard API not available" else pure unit
-      _ <- liftEffect $ trackEvent "clipboard_listener_started" "T"
+      _ <- liftEffect $ Tracker.trackActionEvent Tracker.System Tracker.Info Tracker.SMS_INFO "clipboard_listener_started" (unsafeToForeign "true") "clipboard_listener_started" "T"
       smsString <- ExceptT $ makeAff (\cb -> onClipboardChange (Right >>> cb) Left Right *> pure nonCanceler)
       currentTime <- liftEffect getCurrentTime
       let stringArray = (decodeAndTrack >>> hush >>> maybe [] identity) smsString
@@ -361,17 +368,16 @@ type OtpM a = ExceptT OtpError Aff a
 -- | the `OtpListener` type for more info on how to get OTPs and set OTP rules.
 getOtpListener :: NonEmptyArray SmsReader -> Aff OtpListener
 getOtpListener readers = do
-  _ <- liftEffect $ trackEvent "otp_listener_started" "T"
+  _ <- liftEffect $ Tracker.trackActionEvent Tracker.System Tracker.Info Tracker.SMS_INFO "otp_listener_started" (unsafeToForeign "true") "otp_listener_started" "T"
   otpRulesVar <- AVar.empty -- The OTP rules to be used. Empty at first until `setOtpRules` is called for the first time
   unprocessedSmsVar <- AVar.new [] -- Accumulates any SMSs that arrive before OTP rules are set (so they can be processed once it's set)
 
   let
     setOtpRules rules = do
-      _ <- liftEffect $ trackEvent "otp_rules" (show rules)
+      _ <- liftEffect $ Tracker.trackContextEvent Tracker.User Tracker.Info Tracker.SMS_INFO (unsafeToForeign {"otp_rules" : (show rules)}) "otp_rules" (show rules)
       AVar.tryTake otpRulesVar *> AVar.put rules otpRulesVar
 
     getNextOtp = do
-      _ <- liftEffect $ trackEvent "get_next_otp" "T"
       otpRulesSet <- isOtpRulesSet otpRulesVar
       {--
       If the otp rules have already been set (ie, `setOtpRules` was called once before `getNextOtp`),
