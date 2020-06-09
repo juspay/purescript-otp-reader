@@ -304,8 +304,12 @@ smsConsentAPI = SmsReader "SMS_CONSENT" (runExceptT getNextSms)
     if not consentAPISupported then throwError $ error "User Consent API is not available" else pure unit
     _ <- liftEffect $ Tracker.trackActionEvent Tracker.System Tracker.Info Tracker.SMS_INFO "consent_listener_started" (unsafeToForeign "true") "consent_listener_started" "T"
     smsString <- ExceptT $ makeAff (\cb -> startSmsConsentAPI (Right >>> cb) Left Right *> pure (effectCanceler stopSmsConsentAPI))
+    _ <- liftEffect $ Tracker.trackActionEvent Tracker.System Tracker.Info Tracker.SMS_INFO "sms_consent_shown" (unsafeToForeign "true") "sms_consent_shown" "T"
     if smsString == "DENIED" then throwError $ error consentDeniedErrorMessage else pure unit
     let sms = (decodeAndTrack >>> hush >>> maybe [] singleton) smsString
+    _ <- if (length sms) == 0
+              then pure unit
+              else liftEffect $ Tracker.trackContextEvent Tracker.User Tracker.Info Tracker.SMS_INFO (unsafeToForeign {"no_of_sms_consent" : show $ length sms}) "no_of_sms_consent" (show $ length sms)
     if length sms < 1
       then getNextSms
       else pure sms
@@ -341,6 +345,9 @@ clipboard = SmsReader "CLIPBOARD" (runExceptT getNextSms)
       currentTime <- liftEffect getCurrentTime
       let stringArray = (decodeAndTrack >>> hush >>> maybe [] identity) smsString
           sms = toSms currentTime <$> stringArray
+      _ <- if (length sms) == 0
+              then pure unit
+              else liftEffect $ Tracker.trackContextEvent Tracker.User Tracker.Info Tracker.SMS_INFO (unsafeToForeign {"no_of_sms_clipboard" : show $ length sms}) "no_of_sms_clipboard" (show $ length sms)
       if length sms < 1
         then getNextSms
         else pure sms
@@ -409,19 +416,17 @@ getOtpListener readers = do
       let sender = matchSender rule sms
       let msg = matchMessage rule sms
       let otp = extract rule sms
-      let newbody = replace (Pattern $ fromMaybe "" otp) (Replacement "******") s.body
-      let maskedSms = Sms {  from : s.from,
-                              body : newbody,
-                              time : s.time
-                            }
+
       let s = if sender == Nothing then "false" else "true"
       let m = if msg == Nothing then "false" else "true"
       let o = if otp == Nothing then "false" else "true"
+      let maskedSms = getMaskedSms (fromMaybe "" otp) sms
+
       _ <- liftEffect $ Tracker.trackActionEvent Tracker.System Tracker.Info Tracker.SMS_INFO "matches_sender" (unsafeToForeign s) "matches_sender" s
       _ <- liftEffect $ Tracker.trackActionEvent Tracker.System Tracker.Info Tracker.SMS_INFO "match_message" (unsafeToForeign m) "match_message" m
       _ <- liftEffect $ Tracker.trackActionEvent Tracker.System Tracker.Info Tracker.SMS_INFO "extract_otp" (unsafeToForeign o) "extract_otp" o
-      _ <- liftEffect $ Tracker.trackActionEvent Tracker.System Tracker.Info Tracker.SMS_INFO "sms" (unsafeToForeign maskedSms) "sms" (show maskedSms)
-      _ <- if sender == Nothing || otp == Nothing
+      _ <- if otp == Nothing then pure unit else liftEffect $ Tracker.trackActionEvent Tracker.System Tracker.Info Tracker.SMS_INFO "sms" (unsafeToForeign (maskedSms)) "sms" (show maskedSms)
+      _ <- if sender == Nothing && otp == Nothing
             then liftEffect $ Tracker.trackActionEvent Tracker.System Tracker.Info Tracker.SMS_INFO "sms_unmatched_fly" (unsafeToForeign "true") "sms_unmatched_fly" "T"
             else pure unit
       pure unit
@@ -460,6 +465,15 @@ getOtpListener readers = do
     tryExtract :: Array OtpRule -> ReceivedSms -> Maybe Otp
     tryExtract rules (ReceivedSms sms reader) = (\otp -> Otp otp sms reader) <$> extractOtp sms rules
 
+
+--Returns SMS with masked OTP
+getMaskedSms :: String -> Sms -> Sms
+getMaskedSms otp (Sms s) = do
+  let newbody = replace (Pattern otp) (Replacement "******") s.body
+  Sms {  from : s.from,
+          body : newbody,
+          time : s.time
+        }
 
 
 -- | Return type of `getOtpListener` function.
