@@ -37,6 +37,7 @@ import Data.Maybe (Maybe(..), fromMaybe, isJust, maybe)
 import Data.Newtype (class Newtype, unwrap, wrap)
 import Data.Number (fromString)
 import Data.Ord (greaterThan)
+import Data.String (Pattern(..), Replacement(..), replace)
 import Data.String.Regex (Regex, match, regex)
 import Data.String.Regex.Flags (ignoreCase)
 import Data.Time.Duration (Milliseconds(..))
@@ -49,7 +50,7 @@ import Effect.Class (liftEffect)
 import Effect.Exception (Error, message)
 import Effect.Ref (Ref)
 import Effect.Ref as Ref
-import Foreign (F, Foreign, MultipleErrors, readString, unsafeFromForeign)
+import Foreign (F, Foreign, MultipleErrors, readString)
 import Foreign.Class (class Decode, class Encode, decode)
 import Foreign.Generic (decodeJSON, defaultOptions, encodeJSON, genericDecode, genericEncode)
 import Foreign.Index (readProp)
@@ -148,7 +149,6 @@ foreign import getGodelOtpRules' :: Effect Foreign
 getGodelOtpRules :: String -> Effect (F (Array OtpRule))
 getGodelOtpRules bank = do
   f <- getGodelOtpRules'
-  _ <- liftEffect $ trackEvent "godel_otp_rules" (unsafeFromForeign f)
   pure $ do
     rules <- decode f
     bankRules <- filterA (matchesBank) rules
@@ -389,12 +389,41 @@ getOtpListener readers = do
       otpRules <- getOtpRules otpRulesVar
       case otpRules of
         Nothing -> addToUnprocessed unprocessedSmsVar smsList *> getNextOtp
-        Just rules -> maybe getNextOtp pure $ findMap (tryExtract rules) smsList
+        Just rules -> do
+          _ <- liftEffect $ traverse identity $ pushLogs <$> rules <*> smsList
+          maybe getNextOtp pure $ findMap (tryExtract rules) smsList
   pure {
     getNextOtp: (either Error identity) <$> runExceptT getNextOtp,
     setOtpRules
   }
   where
+
+    pushLogs :: OtpRule -> ReceivedSms -> Effect Unit
+    pushLogs rule (ReceivedSms sms@(Sms s) reader)= do
+    -- pushLogs rule sms@(Sms s)= do
+      let sender = matchSender rule sms
+      let msg = matchMessage rule sms
+      let otp = extract rule sms
+      let newbody = replace (Pattern $ fromMaybe "" otp) (Replacement "******") s.body
+      let maskedSms = Sms {  from : s.from,
+                              body : newbody,
+                              time : s.time
+                            }
+      _ <- if sender == Nothing
+            then liftEffect $ trackEvent "matches_sender" "false"
+            else liftEffect $ trackEvent "matches_sender" "true"
+      _ <- if msg == Nothing
+            then liftEffect $ trackEvent "match_message" "false"
+            else liftEffect $ trackEvent "match_message" "true"
+      _ <- if otp == Nothing
+            then liftEffect $ trackEvent "extract_otp" "false"
+            else liftEffect $ trackEvent "extract_otp" "true"
+      _ <- liftEffect $ trackEvent "sms" (show maskedSms)
+      _ <- if sender == Nothing && msg == Nothing && otp == Nothing
+            then liftEffect $ trackEvent "sms_unmatched_fly" "true"
+            else pure unit
+      pure unit
+
     -- Take a set of Affs, run them in parallel and return the first one that succeeds
     oneOfAff :: forall f a. (Foldable f) => (Functor f) => f (Aff a) -> Aff a
     oneOfAff affs = sequential $ oneOf $ parallel <$> affs
@@ -485,39 +514,39 @@ extractOtp sms rules =
 -- | Match a given SMS against a given rule and attempt to extract the OTP
 -- | from the SMS. Returns `Nothing` if it fails.
 matchAndExtract :: OtpRule -> Sms -> Maybe String
-matchAndExtract (OtpRule rule) sms =
-  matchSender sms >>= matchMessage >>= extract
-  where
-    -- Succeeds if the SMS's 'from' matches any one of the 'from's in the OTP rule (or if the SMS's 'from' is "UNKNOWN_BANK")
-    matchSender :: Sms -> Maybe Sms
-    matchSender (Sms sms') =
-      let
-        senderRules = catMaybes $ makeRegex <$> rule.matches.sender
-        matches = not null $ catMaybes $ (\r -> match r sms'.from) <$> senderRules
-        fromRetrieverApi = sms'.from == "UNKNOWN_BANK"
-      in if matches || fromRetrieverApi then Just (Sms sms') else Nothing
+matchAndExtract orule@(OtpRule rule) sms =
+  matchSender orule sms >>= matchMessage orule >>= extract orule
 
-    -- Succeeds if the SMS's body matches the body regex in the OTP rule
-    matchMessage :: Sms -> Maybe Sms
-    matchMessage (Sms sms') =
-      let
-        matchesBody = isJust $ makeRegex rule.matches.message >>= (\r -> match r sms'.body)
-        matchesOtp = isJust $ makeRegex ("^" <> rule.otp <> "$") >>= (\r -> match r sms'.body) -- if the whole message body is the OTP (like from clipboard)
-      in if matchesBody || matchesOtp then Just (Sms sms') else Nothing
+-- Succeeds if the SMS's 'from' matches any one of the 'from's in the OTP rule (or if the SMS's 'from' is "UNKNOWN_BANK")
+matchSender :: OtpRule -> Sms -> Maybe Sms
+matchSender orule@(OtpRule rule) (Sms sms') =
+  let
+    senderRules = catMaybes $ makeRegex orule <$> rule.matches.sender
+    matches = not null $ catMaybes $ (\r -> match r sms'.from) <$> senderRules
+    fromRetrieverApi = sms'.from == "UNKNOWN_BANK"
+  in if matches || fromRetrieverApi then Just (Sms sms') else Nothing
 
-    -- Attempt to extract the OTP from the SMS body using the otp regex in the OTP rule
-    extract :: Sms -> Maybe String
-    extract (Sms sms') =
-      let
-        group = fromMaybe 0 rule.group
-        otp = join $ makeRegex rule.otp >>= (\r -> match r sms'.body) >>= (\arr -> arr !! group)
-      in otp
+-- Succeeds if the SMS's body matches the body regex in the OTP rule
+matchMessage :: OtpRule -> Sms -> Maybe Sms
+matchMessage orule@(OtpRule rule)  (Sms sms') =
+  let
+    matchesBody = isJust $ makeRegex orule rule.matches.message >>= (\r -> match r sms'.body)
+    matchesOtp = isJust $ makeRegex orule ("^" <> rule.otp <> "$") >>= (\r -> match r sms'.body) -- if the whole message body is the OTP (like from clipboard)
+  in if (matchesBody || matchesOtp) then Just (Sms sms') else Nothing
 
-    -- Helper function to attempt creating a regex from a given string
-    makeRegex :: String -> Maybe Regex
-    makeRegex s = case regex s (ignoreCase) of
-      Right r -> Just r
-      Left err -> let _ = trackException "otp_reader" ("Regex syntax error \"" <> err <> "\" for rule: " <> encodeJSON (OtpRule rule)) in Nothing
+-- Attempt to extract the OTP from the SMS body using the otp regex in the OTP rule
+extract :: OtpRule -> Sms -> Maybe String
+extract orule@(OtpRule rule)  (Sms sms') =
+  let
+    group = fromMaybe 0 rule.group
+    otp = join $ makeRegex orule rule.otp >>= (\r -> match r sms'.body) >>= (\arr -> arr !! group)
+  in otp
+
+-- Helper function to attempt creating a regex from a given string
+makeRegex :: OtpRule -> String -> Maybe Regex
+makeRegex (OtpRule rule)  s = case regex s (ignoreCase) of
+  Right r -> Just r
+  Left err -> let _ = trackException "otp_reader" ("Regex syntax error \"" <> err <> "\" for rule: " <> encodeJSON (OtpRule rule)) in Nothing
 
 
 
