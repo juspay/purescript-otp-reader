@@ -168,11 +168,12 @@ exports.md5Hash = function (s) {
   return JBridge.getMd5(s);
 };
 
-exports.trackException = function (label) {
-  return function(value) {
-    JBridge.trackEvent("dui", "error", "OTPReader_Exception", label + ": " + value)
-  }
-};
+// Previous Exception log : For Reference
+// exports.trackException = function (label) {
+//   return function(value) {
+//     JBridge.trackEvent("dui", "error", "OTPReader_Exception", label + ": " + value)
+//   }
+// };
 
 const loopedFunction = function(){
   return loopedFunction
