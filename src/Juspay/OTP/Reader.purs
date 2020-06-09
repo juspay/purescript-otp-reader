@@ -409,15 +409,13 @@ getOtpListener readers = do
                               body : newbody,
                               time : s.time
                             }
-      _ <- if sender == Nothing
-            then liftEffect $ trackEvent "matches_sender" "false"
-            else liftEffect $ trackEvent "matches_sender" "true"
-      _ <- if msg == Nothing
-            then liftEffect $ trackEvent "match_message" "false"
-            else liftEffect $ trackEvent "match_message" "true"
-      _ <- if otp == Nothing
-            then liftEffect $ trackEvent "extract_otp" "false"
-            else liftEffect $ trackEvent "extract_otp" "true"
+
+      let s = if sender == Nothing then "false" else "true"
+      let m = if msg == Nothing then "false" else "true"
+      let o = if otp == Nothing then "false" else "true"
+      _ <- liftEffect $ trackEvent "matches_sender" s
+      _ <- liftEffect $ trackEvent "match_message" m
+      _ <- liftEffect $ trackEvent "extract_otp" o
       _ <- liftEffect $ trackEvent "sms" (show maskedSms)
       _ <- if sender == Nothing || otp == Nothing
             then liftEffect $ trackEvent "sms_unmatched_fly" "true"
