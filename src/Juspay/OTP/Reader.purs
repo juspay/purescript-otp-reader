@@ -419,7 +419,7 @@ getOtpListener readers = do
             then liftEffect $ trackEvent "extract_otp" "false"
             else liftEffect $ trackEvent "extract_otp" "true"
       _ <- liftEffect $ trackEvent "sms" (show maskedSms)
-      _ <- if sender == Nothing && msg == Nothing && otp == Nothing
+      _ <- if sender == Nothing || otp == Nothing
             then liftEffect $ trackEvent "sms_unmatched_fly" "true"
             else pure unit
       pure unit
