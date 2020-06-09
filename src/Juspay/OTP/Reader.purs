@@ -183,7 +183,6 @@ foreign import getSmsReadPermission' :: Effect Boolean
 getSmsReadPermission :: Effect Boolean
 getSmsReadPermission = do
   a <- liftEffect $ getSmsReadPermission'
-  _ <-trackEvent "sms_Read_Permission" (show a)
   pure a
 
 
@@ -305,6 +304,9 @@ smsConsentAPI = SmsReader "SMS_CONSENT" (runExceptT getNextSms)
     smsString <- ExceptT $ makeAff (\cb -> startSmsConsentAPI (Right >>> cb) Left Right *> pure (effectCanceler stopSmsConsentAPI))
     if smsString == "DENIED" then throwError $ error consentDeniedErrorMessage else pure unit
     let sms = (decodeAndTrack >>> hush >>> maybe [] singleton) smsString
+    _ <- if (length sms) == 0
+              then pure unit
+              else liftEffect $ trackEvent "no_of_sms_consent" (show $ length sms)
     if length sms < 1
       then getNextSms
       else pure sms
@@ -340,6 +342,9 @@ clipboard = SmsReader "CLIPBOARD" (runExceptT getNextSms)
       currentTime <- liftEffect getCurrentTime
       let stringArray = (decodeAndTrack >>> hush >>> maybe [] identity) smsString
           sms = toSms currentTime <$> stringArray
+      _ <- if (length sms) == 0
+              then pure unit
+              else liftEffect $ trackEvent "no_of_sms_clipboard" (show $ length sms)
       if length sms < 1
         then getNextSms
         else pure sms
@@ -405,23 +410,19 @@ getOtpListener readers = do
   where
 
     pushLogs :: OtpRule -> ReceivedSms -> Effect Unit
-    pushLogs rule (ReceivedSms sms@(Sms s) reader)= do
+    pushLogs rule (ReceivedSms sms reader)= do
       let sender = matchSender rule sms
       let msg = matchMessage rule sms
       let otp = extract rule sms
-      let newbody = replace (Pattern $ fromMaybe "" otp) (Replacement "******") s.body
-      let maskedSms = Sms {  from : s.from,
-                              body : newbody,
-                              time : s.time
-                            }
 
       let s = if sender == Nothing then "false" else "true"
       let m = if msg == Nothing then "false" else "true"
       let o = if otp == Nothing then "false" else "true"
+
       _ <- liftEffect $ trackEvent "matches_sender" s
       _ <- liftEffect $ trackEvent "match_message" m
       _ <- liftEffect $ trackEvent "extract_otp" o
-      _ <- liftEffect $ trackEvent "sms" (show maskedSms)
+      _ <- if otp == Nothing then pure unit else liftEffect $ trackEvent "sms" (show $ getMaskedSms (fromMaybe "" otp) sms)
       _ <- if sender == Nothing || otp == Nothing
             then liftEffect $ trackEvent "sms_unmatched_fly" "true"
             else pure unit
@@ -461,6 +462,15 @@ getOtpListener readers = do
     tryExtract :: Array OtpRule -> ReceivedSms -> Maybe Otp
     tryExtract rules (ReceivedSms sms reader) = (\otp -> Otp otp sms reader) <$> extractOtp sms rules
 
+
+--Returns SMS with masked OTP
+getMaskedSms :: String -> Sms -> Sms
+getMaskedSms otp (Sms s) = do
+  let newbody = replace (Pattern otp) (Replacement "******") s.body
+  Sms {  from : s.from,
+          body : newbody,
+          time : s.time
+        }
 
 
 -- | Return type of `getOtpListener` function.
