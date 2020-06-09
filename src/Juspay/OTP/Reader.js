@@ -189,6 +189,6 @@ const tracker = getTracker();
 
 exports._trackException = function(message){
     return function(stacktrace) {
-        tracker._trackException("Action")("System")("DETAILS")(message)(stacktrace)();
+        tracker._trackException("Action")("System")("Exception")("DETAILS")(message)(stacktrace)();
     }
 }
