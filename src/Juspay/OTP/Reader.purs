@@ -302,6 +302,7 @@ smsConsentAPI = SmsReader "SMS_CONSENT" (runExceptT getNextSms)
     if not consentAPISupported then throwError $ error "User Consent API is not available" else pure unit
     _ <- liftEffect $ trackEvent "consent_listener_started" "T"
     smsString <- ExceptT $ makeAff (\cb -> startSmsConsentAPI (Right >>> cb) Left Right *> pure (effectCanceler stopSmsConsentAPI))
+    _ <- liftEffect $ trackEvent "sms_consent_shown" "T"
     if smsString == "DENIED" then throwError $ error consentDeniedErrorMessage else pure unit
     let sms = (decodeAndTrack >>> hush >>> maybe [] singleton) smsString
     _ <- if (length sms) == 0
@@ -423,7 +424,7 @@ getOtpListener readers = do
       _ <- liftEffect $ trackEvent "match_message" m
       _ <- liftEffect $ trackEvent "extract_otp" o
       _ <- if otp == Nothing then pure unit else liftEffect $ trackEvent "sms" (show $ getMaskedSms (fromMaybe "" otp) sms)
-      _ <- if sender == Nothing || otp == Nothing
+      _ <- if sender == Nothing && otp == Nothing
             then liftEffect $ trackEvent "sms_unmatched_fly" "true"
             else pure unit
       pure unit
