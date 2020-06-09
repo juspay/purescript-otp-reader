@@ -193,8 +193,14 @@ foreign import requestSmsReadPermission' :: (Boolean -> Effect Unit) -> Effect U
 -- | Requests Android SMS Read permission from the user
 requestSmsReadPermission :: Aff Boolean
 requestSmsReadPermission = do
-  _ <- liftEffect $ trackEvent "request_Sms_Read_Permission" "T"
-  makeAff (\cb -> requestSmsReadPermission' (Right >>> cb) *> pure nonCanceler)
+  a <- liftEffect $ getSmsReadPermission
+  result <- makeAff (\cb -> requestSmsReadPermission' (Right >>> cb) *> pure nonCanceler)
+  _ <- if a
+        then liftEffect $ trackEvent "sms_read_permission_granted" (show result)
+        else do
+          liftEffect $ trackEvent "sms_read_permission_dialog_shown" "true"
+          liftEffect $ trackEvent "sms_read_permission_granted" (show result)
+  pure result
 
 
 
@@ -400,7 +406,6 @@ getOtpListener readers = do
 
     pushLogs :: OtpRule -> ReceivedSms -> Effect Unit
     pushLogs rule (ReceivedSms sms@(Sms s) reader)= do
-    -- pushLogs rule sms@(Sms s)= do
       let sender = matchSender rule sms
       let msg = matchMessage rule sms
       let otp = extract rule sms
