@@ -54,10 +54,9 @@ import Foreign (F, Foreign, MultipleErrors, readString, unsafeToForeign)
 import Foreign.Class (class Decode, class Encode, decode)
 import Foreign.Generic (decodeJSON, defaultOptions, encodeJSON, genericDecode, genericEncode)
 import Foreign.Index (readProp)
-
 import Tracker (trackAction, trackContext) as Tracker
 import Tracker.Labels (Label(..)) as Tracker
-import Tracker.Types (Level(..), Subcategory(..)) as Tracker
+import Tracker.Types (Level(..), Action(..), Context(..)) as Tracker
 
 -- | Type representing an SMS received using any `SmsReader`s.
 newtype Sms = Sms {
@@ -256,9 +255,9 @@ smsPoller startTime frequency = do
       _ <- if (length sms) == 0
               then pure unit
               else do
-                liftEffect $ Tracker.trackContext Tracker.User Tracker.Info Tracker.SMS_INFO (unsafeToForeign {"no_of_sms" : show $ length sms})
-                liftEffect $ Tracker.trackContext Tracker.User Tracker.Info Tracker.SMS_INFO (unsafeToForeign {"sms_timestamps" : (show (getSmsTime <$> sms))})
-                liftEffect $ Tracker.trackContext Tracker.User Tracker.Info Tracker.SMS_INFO (unsafeToForeign {"sms_sender_name" : (show (getSenderName <$> sms))})
+                liftEffect $ Tracker.trackContext Tracker.User_C Tracker.Info Tracker.SMS_INFO (unsafeToForeign {"no_of_sms" : show $ length sms})
+                liftEffect $ Tracker.trackContext Tracker.User_C Tracker.Info Tracker.SMS_INFO (unsafeToForeign {"sms_timestamps" : (show (getSmsTime <$> sms))})
+                liftEffect $ Tracker.trackContext Tracker.User_C Tracker.Info Tracker.SMS_INFO (unsafeToForeign {"sms_sender_name" : (show (getSenderName <$> sms))})
       liftEffect $ Ref.write (processed <> (hashSms <$> sms)) processedRef
       if length sms < 1
         then getNextSms processedRef
@@ -309,7 +308,7 @@ smsConsentAPI = SmsReader "SMS_CONSENT" (runExceptT getNextSms)
     let sms = (decodeAndTrack >>> hush >>> maybe [] singleton) smsString
     _ <- if (length sms) == 0
               then pure unit
-              else liftEffect $ Tracker.trackContext Tracker.User Tracker.Info Tracker.SMS_INFO (unsafeToForeign {"no_of_sms_consent" : show $ length sms})
+              else liftEffect $ Tracker.trackContext Tracker.User_C Tracker.Info Tracker.SMS_INFO (unsafeToForeign {"no_of_sms_consent" : show $ length sms})
     if length sms < 1
       then getNextSms
       else pure sms
@@ -347,7 +346,7 @@ clipboard = SmsReader "CLIPBOARD" (runExceptT getNextSms)
           sms = toSms currentTime <$> stringArray
       _ <- if (length sms) == 0
               then pure unit
-              else liftEffect $ Tracker.trackContext Tracker.User Tracker.Info Tracker.SMS_INFO (unsafeToForeign {"no_of_sms_clipboard" : show $ length sms})
+              else liftEffect $ Tracker.trackContext Tracker.User_C Tracker.Info Tracker.SMS_INFO (unsafeToForeign {"no_of_sms_clipboard" : show $ length sms})
       if length sms < 1
         then getNextSms
         else pure sms
@@ -381,7 +380,7 @@ getOtpListener readers = do
 
   let
     setOtpRules rules = do
-      _ <- liftEffect $ Tracker.trackContext Tracker.User Tracker.Info Tracker.SMS_INFO (unsafeToForeign {"otp_rules" : (show rules)})
+      _ <- liftEffect $ Tracker.trackContext Tracker.User_C Tracker.Info Tracker.SMS_INFO (unsafeToForeign {"otp_rules" : (show rules)})
       AVar.tryTake otpRulesVar *> AVar.put rules otpRulesVar
 
     getNextOtp = do
