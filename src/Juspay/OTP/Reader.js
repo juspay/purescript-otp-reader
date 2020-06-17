@@ -167,28 +167,3 @@ exports.onClipboardChange = function(callback) {
 exports.md5Hash = function (s) {
   return JBridge.getMd5(s);
 };
-
-// Previous Exception log : For Reference
-// exports.trackException = function (label) {
-//   return function(value) {
-//     JBridge.trackEvent("dui", "error", "OTPReader_Exception", label + ": " + value)
-//   }
-// };
-
-const loopedFunction = function(){
-  return loopedFunction
-}
-const getTracker = function(){
-  var trackerJson = JOS.tracker || {};
-  if (typeof trackerJson._trackException != "function"){
-      trackerJson._trackException = loopedFunction;
-  }
-  return trackerJson;
-}
-const tracker = getTracker();
-
-exports._trackException = function(message){
-    return function(stacktrace) {
-        tracker._trackException("Action")("System")("DETAILS")(message)(stacktrace)();
-    }
-}
