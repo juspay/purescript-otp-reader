@@ -51,7 +51,7 @@ import Effect.Exception (Error, message)
 import Effect.Ref (Ref)
 import Effect.Ref as Ref
 import Foreign (F, Foreign, MultipleErrors, readString, unsafeToForeign)
-import Foreign.Class (class Decode, class Encode, decode)
+import Foreign.Class (class Decode, class Encode, decode, encode)
 import Foreign.Generic (decodeJSON, defaultOptions, encodeJSON, genericDecode, genericEncode)
 import Foreign.Index (readProp)
 import Tracker (trackAction, trackContext, trackException) as Tracker
@@ -303,10 +303,16 @@ smsConsentAPI = SmsReader "SMS_CONSENT" (runExceptT getNextSms)
   getNextSms = do
     consentAPISupported <- liftEffect isConsentAPISupported
     if not consentAPISupported then throwError $ error "User Consent API is not available" else pure unit
-    _ <- liftEffect $ Tracker.trackAction Tracker.System Tracker.Info Tracker.SMS_INFO "consent_listener_started" (unsafeToForeign "true")
+    _ <- liftEffect $ Tracker.trackAction Tracker.System Tracker.Info Tracker.SMS_INFO "sms_consent_listener_started" (unsafeToForeign "true")
     smsString <- ExceptT $ makeAff (\cb -> startSmsConsentAPI (Right >>> cb) Left Right *> pure (effectCanceler stopSmsConsentAPI))
     _ <- liftEffect $ Tracker.trackAction Tracker.System Tracker.Info Tracker.SMS_INFO "sms_consent_shown" (unsafeToForeign "true")
-    if smsString == "DENIED" then throwError $ error consentDeniedErrorMessage else pure unit
+    if smsString == "DENIED"
+      then do
+      _ <- liftEffect $ Tracker.trackAction Tracker.User Tracker.Info Tracker.SMS_INFO "sms_consent_granted" $ encode false
+      throwError $ error consentDeniedErrorMessage
+      else do
+      _ <- liftEffect $ Tracker.trackAction Tracker.User Tracker.Info Tracker.SMS_INFO "sms_consent_granted" $ encode true
+      pure unit
     decodedSmsString <- liftEffect $ decodeAndTrack smsString
     let sms = maybe [] singleton $ hush $ decodedSmsString
     _ <- if (length sms) == 0
@@ -419,7 +425,6 @@ getOtpListener readers = do
       let sender = matchSender rule sms
       let msg = matchMessage rule sms
       let otp = extract rule sms
-      let regex = makeRegex rule <$> r.matches.sender
 
       let s1 = if sender == Nothing then "false" else "true"
       let m1 = if msg == Nothing then "false" else "true"
@@ -427,23 +432,14 @@ getOtpListener readers = do
 
       let maskedSms = getMaskedSms (fromMaybe "" otp) sms
 
-      -- let group = fromMaybe 0 r.group
-      -- let a = makeRegex rule <$> r.matches.sender
-      -- let b = makeRegex rule r.otp >>= (\q -> match q s.body) >>= (\arr -> arr !! group)
-      -- let matchesBody = makeRegex rule r.matches.message >>= (\q -> match q s.body)
-      -- let matchesOtp = makeRegex rule ("^" <> r.otp <> "$") >>= (\q -> match q s.body)
+      _ <- if otp == Nothing
+            then do
+              _ <- logRegexError rule `traverse` r.matches.sender
+              logRegexError rule r.otp
+              logRegexError rule r.matches.message
+              logRegexError rule ("^" <> r.otp <> "$")
+            else pure unit
 
-      -- a <- logRegexError rule <$> r.matches.sender
-      -- b <- logRegexError rule r.otp >>= (\q -> match q s.body) >>= (\arr -> arr !! group)
-      -- c <- logRegexError rule r.matches.message >>= (\q -> match q s.body)
-      -- d <- logRegexError rule ("^" <> r.otp <> "$") >>= (\q -> match q s.body)
-
-      -- _ <- if otp == Nothing
-      --         then do
-      --           let senderRules = catMaybes $ logRegexError rule <$> r.matches.sender
-      --           -- _ <- join $ logRegexError rule <$> r.matches.sender
-      --           pure unit
-              -- else pure unit
       _ <- Tracker.trackAction Tracker.System Tracker.Info Tracker.SMS_INFO "matches_sender" (unsafeToForeign s1)
       _ <- Tracker.trackAction Tracker.System Tracker.Info Tracker.SMS_INFO "match_message" (unsafeToForeign m1)
       _ <- Tracker.trackAction Tracker.System Tracker.Info Tracker.SMS_INFO "extract_otp" (unsafeToForeign o1)
@@ -586,12 +582,12 @@ makeRegex (OtpRule rule)  s = case regex s (ignoreCase) of
   Right r -> Just r
   Left err -> Nothing
 
-logRegexError :: OtpRule -> String -> Effect (Maybe Regex)
+logRegexError :: OtpRule -> String -> Effect Unit
 logRegexError (OtpRule rule) s = case regex s (ignoreCase) of
-    Right r -> pure $ Just r
+    Right r -> pure unit
     Left err -> do
       _ <- Tracker.trackException Tracker.ACTION Tracker.System Tracker.DETAILS "otp_reader" ("Regex syntax error \"" <> err <> "\" for rule: " <> encodeJSON (OtpRule rule))
-      pure Nothing
+      pure unit
 
 
 -- | Used for tracking decode errors for values that should never have failed
