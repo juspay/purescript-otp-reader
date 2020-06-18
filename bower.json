@@ -9,7 +9,7 @@
   "dependencies": {
     "purescript-presto": "https://bitbucket.org/juspay/purescript-presto.git#master",
     "purescript-numbers": "^7.0.0",
-    "purescript-tracker" : "https://bitbucket.org/juspay/purescript-tracker.git#structureupdate"
+    "purescript-tracker" : "https://bitbucket.org/juspay/purescript-tracker.git#master"
   },
   "devDependencies": {
     "purescript-psci-support": "^4.0.0"
