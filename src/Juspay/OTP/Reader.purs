@@ -219,10 +219,10 @@ smsReceiver = SmsReader "SMS_RECEIVER" (runExceptT getNextSms)
     _ <- liftEffect $ Tracker.trackAction Tracker.System Tracker.Info Tracker.SMS_INFO "sms_receiver_started" (unsafeToForeign "true")
     smsString <- ExceptT $ makeAff (\cb -> startSmsReceiver (Right >>> cb) Left Right *> pure (effectCanceler stopSmsReceiver))
     decodedSmsString <- liftEffect $ decodeAndTrack smsString
-    let sms = maybe [] identity $ hush $ decodedSmsString
-    if length sms < 1
+    let decodedSms = maybe [] identity $ hush $ decodedSmsString
+    if length decodedSms < 1
       then getNextSms
-      else pure sms
+      else pure decodedSms
 
 
 
@@ -251,34 +251,34 @@ smsPoller startTime frequency = do
       processed <- liftEffect $ Ref.read processedRef
       currentTime <- Milliseconds <$> liftEffect getCurrentTime
       decodedSmsString <- liftEffect $ decodeAndTrack smsString
-      let sms = filter (notProcessed processed)
+      let decodedSms = filter (notProcessed processed)
             $ filter (notFutureSms currentTime)
             $ fromMaybe [] $ hush $ decodedSmsString
-      _ <- if (length sms) == 0
+      _ <- if (length decodedSms) == 0
               then pure unit
               else do
-                liftEffect $ Tracker.trackContext Tracker.User_C Tracker.Info Tracker.SMS_INFO (unsafeToForeign {"no_of_sms" : show $ length sms})
-                liftEffect $ Tracker.trackContext Tracker.User_C Tracker.Info Tracker.SMS_INFO (unsafeToForeign {"sms_timestamps" : (show (getSmsTime <$> sms))})
-                liftEffect $ Tracker.trackContext Tracker.User_C Tracker.Info Tracker.SMS_INFO (unsafeToForeign {"sms_sender_name" : (show (getSenderName <$> sms))})
-      liftEffect $ Ref.write (processed <> (hashSms <$> sms)) processedRef
-      if length sms < 1
+                liftEffect $ Tracker.trackContext Tracker.User_C Tracker.Info Tracker.SMS_INFO (unsafeToForeign {"no_of_sms" : show $ length decodedSms})
+                liftEffect $ Tracker.trackContext Tracker.User_C Tracker.Info Tracker.SMS_INFO (unsafeToForeign {"sms_timestamps" : (show (getSmsTime <$> decodedSms))})
+                liftEffect $ Tracker.trackContext Tracker.User_C Tracker.Info Tracker.SMS_INFO (unsafeToForeign {"sms_sender_name" : (show (getSenderName <$> decodedSms))})
+      liftEffect $ Ref.write (processed <> (hashSms <$> decodedSms)) processedRef
+      if length decodedSms < 1
         then getNextSms processedRef
-        else pure sms
+        else pure decodedSms
 
     getSenderName :: Sms -> String
-    getSenderName (Sms sms) = sms.from
+    getSenderName (Sms sms') = sms'.from
 
     getSmsTime :: Sms -> Maybe Milliseconds
-    getSmsTime (Sms sms) = Milliseconds <$> fromString sms.time
+    getSmsTime (Sms sms') = Milliseconds <$> fromString sms'.time
 
     hashSms :: Sms -> String
-    hashSms (Sms sms) = md5Hash $ sms.body <> sms.time
+    hashSms (Sms sms') = md5Hash $ sms'.body <> sms'.time
 
     notProcessed :: Array String -> Sms -> Boolean
-    notProcessed processed sms = not $ elem (hashSms sms) processed
+    notProcessed processed sms' = not $ elem (hashSms sms') processed
 
     notFutureSms :: Milliseconds -> Sms -> Boolean
-    notFutureSms currentTime sms = fromMaybe true $ (greaterThan currentTime) <$> getSmsTime sms
+    notFutureSms currentTime sms' = fromMaybe true $ (greaterThan currentTime) <$> getSmsTime sms'
 
 
 
@@ -314,13 +314,13 @@ smsConsentAPI = SmsReader "SMS_CONSENT" (runExceptT getNextSms)
       _ <- liftEffect $ Tracker.trackAction Tracker.User Tracker.Info Tracker.SMS_INFO "sms_consent_granted" $ encode true
       pure unit
     decodedSmsString <- liftEffect $ decodeAndTrack smsString
-    let sms = maybe [] singleton $ hush $ decodedSmsString
-    _ <- if (length sms) == 0
+    let decodedSms = maybe [] singleton $ hush $ decodedSmsString
+    _ <- if (length decodedSms) == 0
               then pure unit
-              else liftEffect $ Tracker.trackContext Tracker.User_C Tracker.Info Tracker.SMS_INFO (unsafeToForeign {"no_of_sms_consent" : show $ length sms})
-    if length sms < 1
+              else liftEffect $ Tracker.trackContext Tracker.User_C Tracker.Info Tracker.SMS_INFO (unsafeToForeign {"no_of_sms_consent" : show $ length decodedSms})
+    if length decodedSms < 1
       then getNextSms
-      else pure sms
+      else pure decodedSms
 
 -- | Check if the error is because the User hit "Deny" on the SMS consent dialog
 isConsentDeniedError :: OtpError -> Boolean
@@ -353,13 +353,13 @@ clipboard = SmsReader "CLIPBOARD" (runExceptT getNextSms)
       currentTime <- liftEffect getCurrentTime
       decodedSmsString <- liftEffect $ decodeAndTrack smsString
       let stringArray = maybe [] identity $ hush $ decodedSmsString
-          sms = toSms currentTime <$> stringArray
-      _ <- if (length sms) == 0
+          decodedSms = toSms currentTime <$> stringArray
+      _ <- if (length decodedSms) == 0
               then pure unit
-              else liftEffect $ Tracker.trackContext Tracker.User_C Tracker.Info Tracker.SMS_INFO (unsafeToForeign {"no_of_sms_clipboard" : show $ length sms})
-      if length sms < 1
+              else liftEffect $ Tracker.trackContext Tracker.User_C Tracker.Info Tracker.SMS_INFO (unsafeToForeign {"no_of_sms_clipboard" : show $ length decodedSms})
+      if length decodedSms < 1
         then getNextSms
-        else pure sms
+        else pure decodedSms
 
     toSms :: Number -> String -> Sms
     toSms time body = Sms {
@@ -421,18 +421,18 @@ getOtpListener readers = do
   where
 
     pushLogs :: OtpRule -> ReceivedSms -> Effect Unit
-    pushLogs rule@(OtpRule r) (ReceivedSms sms@(Sms s) reader)= do
-      let sender = matchSender rule sms
-      let msg = matchMessage rule sms
-      let otp = extract rule sms
+    pushLogs rule@(OtpRule r) (ReceivedSms smss@(Sms s) reader)= do
+      let sender = matchSender rule smss
+      let msg = matchMessage rule smss
+      let extractedOtp = extract rule smss
 
       let s1 = if sender == Nothing then "false" else "true"
       let m1 = if msg == Nothing then "false" else "true"
-      let o1 = if otp == Nothing then "false" else "true"
+      let o1 = if extractedOtp == Nothing then "false" else "true"
 
-      let maskedSms = getMaskedSms (fromMaybe "" otp) sms
+      let maskedSms = getMaskedSms (fromMaybe "" extractedOtp) smss
 
-      _ <- if otp == Nothing
+      _ <- if extractedOtp == Nothing
             then do
               _ <- logRegexError rule `traverse` r.matches.sender
               logRegexError rule r.otp
@@ -443,8 +443,8 @@ getOtpListener readers = do
       _ <- Tracker.trackAction Tracker.System Tracker.Info Tracker.SMS_INFO "matches_sender" (unsafeToForeign s1)
       _ <- Tracker.trackAction Tracker.System Tracker.Info Tracker.SMS_INFO "match_message" (unsafeToForeign m1)
       _ <- Tracker.trackAction Tracker.System Tracker.Info Tracker.SMS_INFO "extract_otp" (unsafeToForeign o1)
-      _ <- if otp == Nothing then pure unit else Tracker.trackAction Tracker.System Tracker.Info Tracker.SMS_INFO "sms" (unsafeToForeign (maskedSms))
-      _ <- if sender == Nothing && otp == Nothing
+      _ <- if extractedOtp == Nothing then pure unit else Tracker.trackAction Tracker.System Tracker.Info Tracker.SMS_INFO "sms" (unsafeToForeign (maskedSms))
+      _ <- if sender == Nothing && extractedOtp == Nothing
             then Tracker.trackAction Tracker.System Tracker.Info Tracker.SMS_INFO "sms_unmatched_fly" (unsafeToForeign "true")
             else pure unit
       pure unit
@@ -459,7 +459,7 @@ getOtpListener readers = do
         res <- r
         pure $ case res of
           Left err -> Left (SmsReaderError err reader)
-          Right smses -> Right $ (\sms -> ReceivedSms sms reader) <$> smses
+          Right smses -> Right $ (\s -> ReceivedSms s reader) <$> smses
       )
 
     -- Used to wait for otp rules to be set for the first time (by `OtpListener.setOtpRules`)
@@ -476,18 +476,18 @@ getOtpListener readers = do
     isOtpRulesSet otpRulesVar = lift $ AVar.isFilled <$> AVar.status otpRulesVar
 
     addToUnprocessed :: AVar (Array ReceivedSms) -> Array ReceivedSms -> OtpM Unit
-    addToUnprocessed unprocessedSmsVar sms = lift do
+    addToUnprocessed unprocessedSmsVar sms' = lift do
       unprocessed <- AVar.take unprocessedSmsVar
-      AVar.put (unprocessed <> sms) unprocessedSmsVar
+      AVar.put (unprocessed <> sms') unprocessedSmsVar
 
     tryExtract :: Array OtpRule -> ReceivedSms -> Maybe Otp
-    tryExtract rules (ReceivedSms sms reader) = (\otp -> Otp otp sms reader) <$> extractOtp sms rules
+    tryExtract rules (ReceivedSms sms' reader) = (\o -> Otp o sms' reader) <$> extractOtp sms' rules
 
 
 --Returns SMS with masked OTP
 getMaskedSms :: String -> Sms -> Sms
-getMaskedSms otp (Sms s) = do
-  let newbody = replace (Pattern otp) (Replacement "XXXXXX") s.body
+getMaskedSms otp' (Sms s) = do
+  let newbody = replace (Pattern otp') (Replacement "XXXXXX") s.body
   Sms {  from : s.from,
           body : newbody,
           time : s.time
@@ -540,16 +540,16 @@ instance showOtpError :: Show OtpError where
 -- | Given an SMS and a list of OTP rules, it will return the first OTP
 -- | that matches one of the given rules or `Nothing` if none of them match.
 extractOtp :: Sms -> Array OtpRule -> Maybe String
-extractOtp sms rules =
-  findMap (\rule -> matchAndExtract rule sms) rules
+extractOtp sms' rules =
+  findMap (\rule -> matchAndExtract rule sms') rules
 
 
 
 -- | Match a given SMS against a given rule and attempt to extract the OTP
 -- | from the SMS. Returns `Nothing` if it fails.
 matchAndExtract :: OtpRule -> Sms -> Maybe String
-matchAndExtract orule@(OtpRule rule) sms =
-  matchSender orule sms >>= matchMessage orule >>= extract orule
+matchAndExtract orule@(OtpRule rule) sms' =
+  matchSender orule sms' >>= matchMessage orule >>= extract orule
 
 -- Succeeds if the SMS's 'from' matches any one of the 'from's in the OTP rule (or if the SMS's 'from' is "UNKNOWN_BANK")
 matchSender :: OtpRule -> Sms -> Maybe Sms
@@ -573,8 +573,8 @@ extract :: OtpRule -> Sms -> Maybe String
 extract orule@(OtpRule rule)  (Sms sms') =
   let
     group = fromMaybe 0 rule.group
-    otp = join $ makeRegex orule rule.otp >>= (\r -> match r sms'.body) >>= (\arr -> arr !! group)
-  in otp
+    extractedOtp = join $ makeRegex orule rule.otp >>= (\r -> match r sms'.body) >>= (\arr -> arr !! group)
+  in extractedOtp
 
 -- Helper function to attempt creating a regex from a given string
 makeRegex :: OtpRule -> String -> Maybe Regex
