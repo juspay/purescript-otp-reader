@@ -18,7 +18,7 @@ exports["getGodelOtpRules'"] = function() {
     return config.otp_rules;
   } catch(e) {
     console.error(e);
-    return null;
+    return [];
   }
 }
 
