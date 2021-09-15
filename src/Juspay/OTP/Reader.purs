@@ -224,8 +224,8 @@ smsRetriever = SmsReader "SMS_RETRIEVER" (runExceptT getNextSms)
     _ <- liftEffect $ Tracker.trackAction Tracker.System Tracker.Info Tracker.SMS_INFO "sms_retriever_started" (unsafeToForeign "true") Object.empty
     smsString <- ExceptT $ makeAff (\cb -> fetchSmsRetriever (Right >>> cb) Left Right *> pure (effectCanceler cancelFetchSmsRetriever))
     _ <- if smsString == "TIMEOUT" then throwError $ error consentDeniedErrorMessage else pure unit
-    let sms' = smsString # hush # maybe [] identity
-    _ <- liftEffect $ decodeAndTrack sms'
+    decodedSmsString <- liftEffect $ decodeAndTrack smsString
+    let sms'= maybe [] identity $ hush $ decodedSmsString
     if length sms' < 1
       then getNextSms
       else pure sms'
