@@ -5,7 +5,9 @@ module Juspay.OTP.Reader (
     SmsReader(..),
     getName,
     smsReceiver,
+    smsRetriever,
     smsPoller,
+    initiateSMSRetriever,
     isConsentAPISupported,
     smsConsentAPI,
     isConsentDeniedError,
@@ -203,6 +205,34 @@ requestSmsReadPermission = do
           liftEffect $ Tracker.trackAction Tracker.User Tracker.Info Tracker.SMS_INFO "sms_read_permission_granted" (unsafeToForeign result) Object.empty
   pure result
 
+
+foreign import fetchSmsRetriever :: (Either Error String -> Effect Unit)
+  -> (Error -> Either Error String) -> (String -> Either Error String) -> Effect Unit
+foreign import startSmsRetriever :: (Either Error String -> Effect Unit)
+  -> (Error -> Either Error String) -> (String -> Either Error String) -> Effect Unit
+foreign import stopSmsRetriever :: Effect Unit
+foreign import cancelFetchSmsRetriever :: Effect Unit
+
+-- | Used for google's hash based otp reader
+-- | This does not require sms permission, but can be used only if sms backend is willing to configure app based Token
+-- | Calling `getName` on this will return the string "SMS_Retriever".
+smsRetriever :: SmsReader
+smsRetriever = SmsReader "SMS_RETRIEVER" (runExceptT getNextSms)
+  where
+  getNextSms :: ExceptT Error Aff (Array Sms)
+  getNextSms = do
+    _ <- liftEffect $ Tracker.trackAction Tracker.System Tracker.Info Tracker.SMS_INFO "sms_retriever_started" (unsafeToForeign "true") Object.empty
+    smsString <- ExceptT $ makeAff (\cb -> fetchSmsRetriever (Right >>> cb) Left Right *> pure (effectCanceler cancelFetchSmsRetriever))
+    _ <- if smsString == "TIMEOUT" then throwError $ error consentDeniedErrorMessage else pure unit
+    let sms' = smsString # hush # maybe [] identity
+    _ <- liftEffect $ decodeAndTrack sms'
+    if length sms' < 1
+      then getNextSms
+      else pure sms'
+
+initiateSMSRetriever :: Aff (Either Error String)
+initiateSMSRetriever = do
+  makeAff (\cb -> startSmsRetriever (Right >>> cb) Left Right *> pure (effectCanceler stopSmsRetriever))
 
 
 foreign import startSmsReceiver :: (Either Error String -> Effect Unit)

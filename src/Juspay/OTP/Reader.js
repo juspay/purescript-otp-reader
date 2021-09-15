@@ -79,6 +79,64 @@ exports.startSmsReceiver = function (callback) {
   }
 };
 
+exports.stopSmsRetriever = function () {
+  try {
+    JBridge.detach(["SMS_RETRIEVER"]);
+  } catch(e) {
+    //TODO track this
+  }
+};
+
+exports.startSmsRetriever = function (callback) {
+  return function(left) {
+    return function(right) {
+      return function() {
+        try {
+          var cb = callbackMapper.map(function(data) {
+            callback(right(data))();
+          });
+          JBridge.attach("SMS_RETRIEVER","{}",cb);
+        } catch(e) {
+          //TODO track this
+          setTimeout(function() { callback(left(e))(); }, 0);
+        }
+      }
+    }
+  }
+};
+
+exports.fetchSmsRetriever = function (callback) {
+  return function(left) {
+    return function(right) {
+      return function() {
+        try {
+          var cb = callbackMapper.map(function(data) {
+            callback(right(data))();
+          });
+          JBridge.execute("SMS_RETRIEVER","getOtp","{}",cb);
+        } catch(e) {
+          //TODO track this
+          setTimeout(function() { callback(left(e))(); }, 0);
+        }
+      }
+    }
+  }
+};
+
+exports.cancelFetchSmsRetriever = function () {
+  return function() {
+    try {
+      var cb = callbackMapper.map(function(data) {
+        //Add logs here to debug
+      });
+      JBridge.execute("SMS_RETRIEVER","getOtp","{}",cb);
+    } catch(e) {
+      //TODO track this
+    }
+  }
+};
+
+
 exports.stopSmsReceiver = function () {
   try {
     JBridge.detach(["SMS_RECEIVE"]);
@@ -167,3 +225,28 @@ exports.onClipboardChange = function(callback) {
 exports.md5Hash = function (s) {
   return JBridge.getMd5(s);
 };
+
+// Previous Exception log : For Reference
+// exports.trackException = function (label) {
+//   return function(value) {
+//     JBridge.trackEvent("dui", "error", "OTPReader_Exception", label + ": " + value)
+//   }
+// };
+
+const loopedFunction = function(){
+  return loopedFunction
+}
+const getTracker = function(){
+  var trackerJson = window.JOS && window.JOS.tracker || {};
+  if (typeof trackerJson._trackException != "function"){
+      trackerJson._trackException = loopedFunction;
+  }
+  return trackerJson;
+}
+const tracker = getTracker();
+
+exports._trackException = function(message){
+    return function(stacktrace) {
+        tracker._trackException("Action")("System")("DETAILS")(message)(stacktrace)();
+    }
+}

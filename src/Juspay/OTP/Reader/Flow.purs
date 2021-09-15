@@ -21,15 +21,15 @@ import Juspay.OTP.Reader (Otp(..), OtpError(..), OtpRule(..), Sms(..), SmsReader
 import Juspay.OTP.Reader as O
 import Presto.Core.Types.Language.Flow (Flow, doAff)
 
-doAff' :: forall a. Aff a -> Flow a
+doAff':: forall a e. Aff a -> Flow e a
 doAff' aff = doAff aff
 
-doEff' :: forall a. Effect a -> Flow a
+doEff' :: forall a e. Effect a -> Flow e a
 doEff' eff = doAff' $ liftEffect eff
 
 -- | Flow version of `getGodelOtpRules` from `Juspay.OTP.Reader`
 -- | Gets bank OTP rules from Godel's config.
-getGodelOtpRules :: String -> Flow (F (Array OtpRule))
+getGodelOtpRules :: forall e. String -> Flow e (F (Array OtpRule))
 getGodelOtpRules = doEff' <<< O.getGodelOtpRules
 
 -- | Flow version of smsPoller from Juspay.OTP.Reader
@@ -38,31 +38,31 @@ getGodelOtpRules = doEff' <<< O.getGodelOtpRules
 -- | (eg: session start time or time just before OTP trigger). The second
 -- | argument specifies the frequency with which the poller should run (suggested
 -- | frequency: 2 seconds). This requires SMS permission to work
-smsPoller :: Milliseconds -> Milliseconds -> Flow SmsReader
+smsPoller :: forall e. Milliseconds -> Milliseconds -> Flow e SmsReader
 smsPoller startTime frequency = do
   doEff' $ O.smsPoller startTime frequency
 
 -- | Check if User Consent API functions are available
-isConsentAPISupported :: Flow Boolean
+isConsentAPISupported :: forall e. Flow e Boolean
 isConsentAPISupported = doEff' O.isConsentAPISupported
 
 -- | Check if the JBridge functions for Clipboard are available.
-isClipboardSupported :: Flow Boolean
+isClipboardSupported :: forall e. Flow e Boolean
 isClipboardSupported = doEff' O.isClipboardSupported
 
--- | Flow version of `getSmsReadPermission` from Juspay.OTP.Reader
+-- | Flow e version of `getSmsReadPermission` from Juspay.OTP.Reader
 -- | Checks if Android SMS Read permission has been granted
-getSmsReadPermission :: Flow Boolean
+getSmsReadPermission :: forall e. Flow e Boolean
 getSmsReadPermission = doAff' $ liftEffect O.getSmsReadPermission
 
--- | Flow version of `getSmsReadPermission` from Juspay.OTP.Reader
+-- | Flow e version of `getSmsReadPermission` from Juspay.OTP.Reader
 -- | Requests Android SMS Read permission from the user
-requestSmsReadPermission :: Flow Boolean
+requestSmsReadPermission :: forall e. Flow e Boolean
 requestSmsReadPermission = doAff' O.requestSmsReadPermission
 
-type OtpListener = {
-  getNextOtp :: Flow Otp,
-  setOtpRules :: Array OtpRule -> Flow Unit
+type OtpListener e = {
+  getNextOtp :: Flow e Otp,
+  setOtpRules :: Array OtpRule -> Flow e Unit
 }
 
 -- | Flow version of `getSmsReadPermission` from Juspay.OTP.Reader
@@ -70,7 +70,7 @@ type OtpListener = {
 -- | supplied `SmsReader`s  by running them in parallel to capture any incoming
 -- | SMSs and attempts to extract an OTP from them using given OTP rules. Check
 -- | the `OtpListener` type for more info on how to get OTPs and set OTP rules.
-getOtpListener :: NonEmptyArray SmsReader -> Flow OtpListener
+getOtpListener :: forall e. NonEmptyArray SmsReader -> Flow e (OtpListener e)
 getOtpListener readers = do
   listener <- doAff' $ O.getOtpListener readers
   pure {
