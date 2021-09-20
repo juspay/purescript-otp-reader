@@ -7,15 +7,14 @@
     "output"
   ],
   "dependencies": {
-    "purescript-presto": "git@bitbucket.org:juspay/purescript-presto.git#PICAF-5359-build-successful",
+    "purescript-presto": "git@bitbucket.org:juspay/purescript-presto.git#master",
     "purescript-numbers": "^7.0.0",
-    "purescript-tracker": "git@bitbucket.org:juspay/purescript-tracker.git#PICAF-5359-build-successful"
+    "purescript-tracker": "git@bitbucket.org:juspay/purescript-tracker.git#master"
   },
   "devDependencies": {
     "purescript-psci-support": "^4.0.0"
   },
   "resolutions": {
-    "purescript-presto": "PICAF-5359-build-successful",
     "purescript-typelevel-prelude": ">= 4.0.0 < 6.0.0",
     "purescript-foreign-object": "^2.0.0",
     "purescript-foreign-generic": "^10.0.0",
