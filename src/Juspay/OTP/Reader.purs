@@ -71,9 +71,8 @@ newtype Sms = Sms {
 derive instance eqSms :: Eq Sms
 derive instance newtypeSms :: Newtype Sms _
 derive instance genericSms :: Generic Sms _
-derive instance sms :: Generic Sms _
 instance showSms :: Show Sms where
-	show = genericShow
+  show = genericShow
 
 -- | Ordered by SMS time. If conversion of the time string to a Number fails,
 -- | regular string ordering is used as a fallback
@@ -174,7 +173,7 @@ getGodelOtpRules bank = do
 data SmsReader = SmsReader String (Aff (Either Error (Array Sms)))
 derive instance smsReader :: Generic SmsReader _
 instance showSmsReader :: Show SmsReader where
-	show (SmsReader x _) = "SmsReader" <> x
+  show (SmsReader x _) = "SmsReader" <> x
 
 -- | Get the name of an `SmsReader`. Useful for differentiating between `SmsReader`s
 getName :: SmsReader -> String
@@ -554,7 +553,7 @@ type OtpListener = {
 data Otp = Otp String Sms SmsReader | Error OtpError
 derive instance otp :: Generic Otp _
 instance showOtp :: Show Otp where
-	show = genericShow
+  show = genericShow
 
 -- | Represents an error that occured during `OtpListener.getNextOtp`. It can
 -- | either be an `Error` thrown by one of the `SmsReader`s or some other generic
