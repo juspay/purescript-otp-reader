@@ -34,7 +34,7 @@ import Data.Array.NonEmpty (NonEmptyArray, (!!))
 import Data.Either (Either(..), either, hush)
 import Data.Foldable (class Foldable, oneOf)
 import Data.Generic.Rep (class Generic)
-import Data.Generic.Rep.Show (genericShow)
+import Data.Show.Generic (genericShow)
 import Data.Maybe (Maybe(..), fromMaybe, isJust, maybe)
 import Data.Newtype (class Newtype, unwrap, wrap)
 import Data.Number (fromString)
@@ -146,12 +146,12 @@ instance decodeOtpRule :: Decode OtpRule where
 
 
 
-foreign import getGodelOtpRules' :: Effect Foreign
+foreign import getGodelOtpRulesImpl :: Effect Foreign
 
 -- | Gets bank OTP rules from Godel's config.
 getGodelOtpRules :: String -> Effect (F (Array OtpRule))
 getGodelOtpRules bank = do
-  f <- getGodelOtpRules'
+  f <- getGodelOtpRulesImpl
   pure $ do
     rules <- decode f
     bankRules <- filterA (matchesBank) rules
@@ -180,23 +180,23 @@ getName :: SmsReader -> String
 getName (SmsReader name _) = name
 
 
-foreign import getSmsReadPermission' :: Effect Boolean
+foreign import getSmsReadPermissionImpl :: Effect Boolean
 
 -- | Checks if Android SMS Read permission has been granted
 getSmsReadPermission :: Effect Boolean
 getSmsReadPermission = do
-  a <- getSmsReadPermission'
+  a <- getSmsReadPermissionImpl
   pure a
 
 
 
-foreign import requestSmsReadPermission' :: (Boolean -> Effect Unit) -> Effect Unit
+foreign import requestSmsReadPermissionImpl :: (Boolean -> Effect Unit) -> Effect Unit
 
 -- | Requests Android SMS Read permission from the user
 requestSmsReadPermission :: Aff Boolean
 requestSmsReadPermission = do
   a <- liftEffect $ getSmsReadPermission
-  result <- makeAff (\cb -> requestSmsReadPermission' (Right >>> cb) *> pure nonCanceler)
+  result <- makeAff (\cb -> requestSmsReadPermissionImpl (Right >>> cb) *> pure nonCanceler)
   _ <- if a
         then liftEffect $ Tracker.trackAction Tracker.User Tracker.Info Tracker.SMS_INFO "sms_read_permission_granted" (unsafeToForeign result) Object.empty
         else do
