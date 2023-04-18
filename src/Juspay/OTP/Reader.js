@@ -1,4 +1,4 @@
-import { callbackMapper } from 'preto-ui';
+import { callbackMapper } from 'presto-ui';
 
 export const getGodelOtpRulesImpl = function() {
   try {
