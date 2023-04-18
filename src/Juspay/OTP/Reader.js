@@ -1,6 +1,6 @@
-const callbackMapper = require("presto-ui").callbackMapper;
+import { callbackMapper } from 'presto-ui';
 
-exports["getGodelOtpRules'"] = function() {
+export const getGodelOtpRulesImpl = function() {
   try {
     //Temporarily create an iframe just for loading godel config (so that this microapp's context isn't modified)
     var configString = JBridge.loadFileInDUI('payments/in.juspay.godel/v1-config.jsa');
@@ -22,7 +22,7 @@ exports["getGodelOtpRules'"] = function() {
   }
 }
 
-exports["getSmsReadPermission'"] = function () {
+export const getSmsReadPermissionImpl = function () {
   try {
     var data = JBridge.checkReadSMSPermission();
     var permissions = JSON.parse(data);
@@ -37,7 +37,7 @@ exports["getSmsReadPermission'"] = function () {
   }
 };
 
-exports["requestSmsReadPermission'"] = function(callback) {
+export const requestSmsReadPermissionImpl = function(callback) {
   return function() {
     try {
       var cb = callbackMapper.map(function(params) {
@@ -61,7 +61,7 @@ exports["requestSmsReadPermission'"] = function(callback) {
   }
 }
 
-exports.startSmsReceiver = function (callback) {
+export const startSmsReceiver = function (callback) {
   return function(left) {
     return function(right) {
       return function() {
@@ -79,7 +79,7 @@ exports.startSmsReceiver = function (callback) {
   }
 };
 
-exports.stopSmsRetriever = function () {
+export const stopSmsRetriever = function () {
   try {
     JBridge.detach(["SMS_RETRIEVER"]);
   } catch(e) {
@@ -87,7 +87,7 @@ exports.stopSmsRetriever = function () {
   }
 };
 
-exports.startSmsRetriever = function (callback) {
+export const startSmsRetriever = function (callback) {
   return function(left) {
     return function(right) {
       return function() {
@@ -105,7 +105,7 @@ exports.startSmsRetriever = function (callback) {
   }
 };
 
-exports.fetchSmsRetriever = function (callback) {
+export const fetchSmsRetriever = function (callback) {
   return function(left) {
     return function(right) {
       return function() {
@@ -123,7 +123,7 @@ exports.fetchSmsRetriever = function (callback) {
   }
 };
 
-exports.cancelFetchSmsRetriever = function () {
+export const cancelFetchSmsRetriever = function () {
   return function() {
     try {
       var cb = callbackMapper.map(function(data) {
@@ -137,7 +137,7 @@ exports.cancelFetchSmsRetriever = function () {
 };
 
 
-exports.stopSmsReceiver = function () {
+export const stopSmsReceiver = function () {
   try {
     JBridge.detach(["SMS_RECEIVE"]);
   } catch(e) {
@@ -145,7 +145,7 @@ exports.stopSmsReceiver = function () {
   }
 };
 
-exports.isConsentAPISupported = function() {
+export const isConsentAPISupported = function() {
   try {
     // User consent API was added along with androidX migration in godel-core
     var usingAndroidX = JBridge.getResourceByName("using_androidx");
@@ -155,7 +155,7 @@ exports.isConsentAPISupported = function() {
   }
 }
 
-exports.startSmsConsentAPI = function (callback) {
+export const startSmsConsentAPI = function (callback) {
   return function(left) {
     return function(right) {
       return function() {
@@ -173,7 +173,7 @@ exports.startSmsConsentAPI = function (callback) {
   }
 };
 
-exports.stopSmsConsentAPI = function () {
+export const stopSmsConsentAPI = function () {
   try {
     JBridge.detach(["SMS_CONSENT"]);
   } catch(e) {
@@ -181,7 +181,7 @@ exports.stopSmsConsentAPI = function () {
   }
 };
 
-exports.readSms = function (time) {
+export const readSms = function (time) {
   return function(left) {
     return function(right) {
       return function() {
@@ -196,15 +196,15 @@ exports.readSms = function (time) {
   }
 };
 
-exports.getCurrentTime = function() {
+export const getCurrentTime = function() {
   return Date.now();
 }
 
-exports.isClipboardSupported = function() {
+export const isClipboardSupported = function() {
   return typeof JBridge.onClipboardChange == "function";
 }
 
-exports.onClipboardChange = function(callback) {
+export const onClipboardChange = function(callback) {
   return function(left) {
     return function(right) {
       return function() {
@@ -222,12 +222,12 @@ exports.onClipboardChange = function(callback) {
   }
 }
 
-exports.md5Hash = function (s) {
+export const md5Hash = function (s) {
   return JBridge.getMd5(s);
 };
 
 // Previous Exception log : For Reference
-// exports.trackException = function (label) {
+// export const trackException = function (label) {
 //   return function(value) {
 //     JBridge.trackEvent("dui", "error", "OTPReader_Exception", label + ": " + value)
 //   }
@@ -245,7 +245,7 @@ const getTracker = function(){
 }
 const tracker = getTracker();
 
-exports._trackException = function(message){
+export const _trackException = function(message){
     return function(stacktrace) {
         tracker._trackException("Action")("System")("DETAILS")(message)(stacktrace)();
     }

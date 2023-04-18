@@ -7,17 +7,11 @@
     "output"
   ],
   "dependencies": {
-    "purescript-presto": "git@bitbucket.org:juspay/purescript-presto.git#master",
-    "purescript-numbers": "^7.0.0",
-    "purescript-tracker": "git@bitbucket.org:juspay/purescript-tracker.git#master"
+    "purescript-presto": "git@bitbucket.org:juspay/purescript-presto.git#p-0.15-master",
+    "purescript-numbers": "^9.0.0",
+    "purescript-tracker": "git@bitbucket.org:juspay/purescript-tracker.git#p-0.15-master"
   },
   "devDependencies": {
-    "purescript-psci-support": "^4.0.0"
-  },
-  "resolutions": {
-    "purescript-typelevel-prelude": ">= 4.0.0 < 6.0.0",
-    "purescript-foreign-object": "^2.0.0",
-    "purescript-foreign-generic": "^10.0.0",
-    "purescript-record": "^2.0.0"
+    "purescript-psci-support": "^6.0.0"
   }
 }
