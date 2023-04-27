@@ -1,18 +1,22 @@
-const callbackMapper = require("presto-ui").callbackMapper;
+import * as prestoUI from "presto-ui";
+const callbackMapper = prestoUI.callbackMapper;
 
-exports["getGodelOtpRules'"] = function() {
+
+export const getGodelOtpRulesImpl = function() {
   try {
     //Temporarily create an iframe just for loading godel config (so that this microapp's context isn't modified)
-    var configString = JBridge.loadFileInDUI('payments/in.juspay.godel/v1-config.jsa');
-    var iframe = document.createElement('iframe');
+    const configString = window.JBridge.loadFileInDUI("payments/in.juspay.godel/v1-config.jsa");
+    const iframe = document.createElement("iframe");
     document.body.appendChild(iframe);
-    var w = iframe.contentWindow;
+    const w = iframe.contentWindow;
 
     w.godelVersion = "0.0rc0_0";
     w.godelRemotesVersion = "0.0rc0_0";
     w.clientId = "otp_reader";
+    // Don't remove this eslint ignore
+    // eslint-disable-next-line
     w.eval.call(w, configString);
-    var config = JSON.parse(w.getConfigString());
+    const config = JSON.parse(w.getConfigString());
 
     document.body.removeChild(iframe);
     return config.otp_rules;
@@ -22,10 +26,10 @@ exports["getGodelOtpRules'"] = function() {
   }
 }
 
-exports["getSmsReadPermission'"] = function () {
+export const getSmsReadPermissionImpl = function () {
   try {
-    var data = JBridge.checkReadSMSPermission();
-    var permissions = JSON.parse(data);
+    const data = window.JBridge.checkReadSMSPermission();
+    const permissions = JSON.parse(data);
     if(permissions["READ_SMS"] === true && permissions["RECEIVE_SMS"] === true) {
       return true
     } else {
@@ -37,12 +41,12 @@ exports["getSmsReadPermission'"] = function () {
   }
 };
 
-exports["requestSmsReadPermission'"] = function(callback) {
+export const requestSmsReadPermissionImpl = function(callback) {
   return function() {
     try {
-      var cb = callbackMapper.map(function(params) {
+      const cb = callbackMapper.map(function(params) {
         try {
-          var permissions = JSON.parse(params);
+          const permissions = JSON.parse(params);
           if(permissions["READ_SMS"] === true && permissions["RECEIVE_SMS"] === true) {
             callback(true)();
           } else {
@@ -53,7 +57,7 @@ exports["requestSmsReadPermission'"] = function(callback) {
           callback(false)();
         }
       });
-      JBridge.requestPermission(["android.permission.READ_SMS", "android.permission.RECEIVE_SMS"], 10, cb);
+      window.JBridge.requestPermission(["android.permission.READ_SMS", "android.permission.RECEIVE_SMS"], 10, cb);
     } catch(e) {
       //TODO track this
       callback(false)();
@@ -61,15 +65,15 @@ exports["requestSmsReadPermission'"] = function(callback) {
   }
 }
 
-exports.startSmsReceiver = function (callback) {
+export const startSmsReceiver = function (callback) {
   return function(left) {
     return function(right) {
       return function() {
         try {
-          var cb = callbackMapper.map(function(data) {
+          const cb = callbackMapper.map(function(data) {
             callback(right(data))();
           });
-          JBridge.attach("SMS_RECEIVE","{}",cb);
+          window.JBridge.attach("SMS_RECEIVE","{}",cb);
         } catch(e) {
           //TODO track this
           setTimeout(function() { callback(left(e))(); }, 0);
@@ -79,23 +83,23 @@ exports.startSmsReceiver = function (callback) {
   }
 };
 
-exports.stopSmsRetriever = function () {
+export const stopSmsRetriever = function () {
   try {
-    JBridge.detach(["SMS_RETRIEVER"]);
+    window.JBridge.detach(["SMS_RETRIEVER"]);
   } catch(e) {
     //TODO track this
   }
 };
 
-exports.startSmsRetriever = function (callback) {
+export const startSmsRetriever = function (callback) {
   return function(left) {
     return function(right) {
       return function() {
         try {
-          var cb = callbackMapper.map(function(data) {
+          const cb = callbackMapper.map(function(data) {
             callback(right(data))();
           });
-          JBridge.attach("SMS_RETRIEVER","{}",cb);
+          window.JBridge.attach("SMS_RETRIEVER","{}",cb);
         } catch(e) {
           //TODO track this
           setTimeout(function() { callback(left(e))(); }, 0);
@@ -105,15 +109,15 @@ exports.startSmsRetriever = function (callback) {
   }
 };
 
-exports.fetchSmsRetriever = function (callback) {
+export const fetchSmsRetriever = function (callback) {
   return function(left) {
     return function(right) {
       return function() {
         try {
-          var cb = callbackMapper.map(function(data) {
+          const cb = callbackMapper.map(function(data) {
             callback(right(data))();
           });
-          JBridge.execute("SMS_RETRIEVER","getOtp","{}",cb);
+          window.JBridge.execute("SMS_RETRIEVER","getOtp","{}",cb);
         } catch(e) {
           //TODO track this
           setTimeout(function() { callback(left(e))(); }, 0);
@@ -123,13 +127,13 @@ exports.fetchSmsRetriever = function (callback) {
   }
 };
 
-exports.cancelFetchSmsRetriever = function () {
+export const cancelFetchSmsRetriever = function () {
   return function() {
     try {
-      var cb = callbackMapper.map(function(data) {
+      const cb = callbackMapper.map(function(data) {
         //Add logs here to debug
       });
-      JBridge.execute("SMS_RETRIEVER","getOtp","{}",cb);
+      window.JBridge.execute("SMS_RETRIEVER","getOtp","{}",cb);
     } catch(e) {
       //TODO track this
     }
@@ -137,33 +141,33 @@ exports.cancelFetchSmsRetriever = function () {
 };
 
 
-exports.stopSmsReceiver = function () {
+export const stopSmsReceiver = function () {
   try {
-    JBridge.detach(["SMS_RECEIVE"]);
+    window.JBridge.detach(["SMS_RECEIVE"]);
   } catch(e) {
     //TODO track this
   }
 };
 
-exports.isConsentAPISupported = function() {
+export const isConsentAPISupported = function() {
   try {
     // User consent API was added along with androidX migration in godel-core
-    var usingAndroidX = JBridge.getResourceByName("using_androidx");
+    const usingAndroidX = window.JBridge.getResourceByName("using_androidx");
     return usingAndroidX === "true";
   } catch(e) {
     return false;
   }
 }
 
-exports.startSmsConsentAPI = function (callback) {
+export const startSmsConsentAPI = function (callback) {
   return function(left) {
     return function(right) {
       return function() {
         try {
-          var cb = callbackMapper.map(function(data) {
+          const cb = callbackMapper.map(function(data) {
             callback(right(data))();
           });
-          JBridge.attach("SMS_CONSENT","{}",cb);
+          window.JBridge.attach("SMS_CONSENT","{}",cb);
         } catch(e) {
           //TODO track this
           setTimeout(function() { callback(left(e))(); }, 0);
@@ -173,20 +177,20 @@ exports.startSmsConsentAPI = function (callback) {
   }
 };
 
-exports.stopSmsConsentAPI = function () {
+export const stopSmsConsentAPI = function () {
   try {
-    JBridge.detach(["SMS_CONSENT"]);
+    window.JBridge.detach(["SMS_CONSENT"]);
   } catch(e) {
     //TODO track this
   }
 };
 
-exports.readSms = function (time) {
+export const readSms = function (time) {
   return function(left) {
     return function(right) {
       return function() {
         try {
-          return right(JBridge.fetchFromInbox(time));
+          return right(window.JBridge.fetchFromInbox(time));
         } catch(e) {
           //TODO track this
           return left(e);
@@ -196,23 +200,23 @@ exports.readSms = function (time) {
   }
 };
 
-exports.getCurrentTime = function() {
+export const getCurrentTime = function() {
   return Date.now();
 }
 
-exports.isClipboardSupported = function() {
-  return typeof JBridge.onClipboardChange == "function";
+export const isClipboardSupported = function() {
+  return typeof window.JBridge.onClipboardChange === "function";
 }
 
-exports.onClipboardChange = function(callback) {
+export const onClipboardChange = function(callback) {
   return function(left) {
     return function(right) {
       return function() {
         try {
-          var cb = callbackMapper.map(function(s) {
+          const cb = callbackMapper.map(function(s) {
             callback(right(s))();
           })
-          JBridge.onClipboardChange(cb);
+          window.JBridge.onClipboardChange(cb);
         } catch(e) {
           //TODO track this
           setTimeout(function() { callback(left(e))(); }, 0);
@@ -222,14 +226,14 @@ exports.onClipboardChange = function(callback) {
   }
 }
 
-exports.md5Hash = function (s) {
-  return JBridge.getMd5(s);
+export const md5Hash = function (s) {
+  return window.JBridge.getMd5(s);
 };
 
 // Previous Exception log : For Reference
-// exports.trackException = function (label) {
+// export const trackException = function (label) {
 //   return function(value) {
-//     JBridge.trackEvent("dui", "error", "OTPReader_Exception", label + ": " + value)
+//     window.JBridge.trackEvent("dui", "error", "OTPReader_Exception", label + ": " + value)
 //   }
 // };
 
@@ -237,16 +241,16 @@ const loopedFunction = function(){
   return loopedFunction
 }
 const getTracker = function(){
-  var trackerJson = window.JOS && window.JOS.tracker || {};
-  if (typeof trackerJson._trackException != "function"){
-      trackerJson._trackException = loopedFunction;
+  const trackerJson = window.JOS && window.JOS.tracker || {};
+  if (typeof trackerJson._trackException !== "function"){
+    trackerJson._trackException = loopedFunction;
   }
   return trackerJson;
 }
 const tracker = getTracker();
 
-exports._trackException = function(message){
-    return function(stacktrace) {
-        tracker._trackException("Action")("System")("DETAILS")(message)(stacktrace)();
-    }
+export const _trackException = function(message){
+  return function(stacktrace) {
+    tracker._trackException("Action")("System")("DETAILS")(message)(stacktrace)();
+  }
 }

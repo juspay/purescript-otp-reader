@@ -9,11 +9,28 @@
   },
   "dependencies": {},
   "devDependencies": {
-    "pulp": "^13.0.0",
-    "purescript": "^0.12.5"
+    "@commitlint/cli": "^17.2.0",
+    "@commitlint/config-conventional": "^17.2.0",
+    "@digitalroute/cz-conventional-changelog-for-jira": "^7.4.2",
+    "@semantic-release/changelog": "^6.0.1",
+    "@semantic-release/commit-analyzer": "^9.0.2",
+    "@semantic-release/git": "^10.0.1",
+    "@semantic-release/npm": "^9.0.1",
+    "@semantic-release/release-notes-generator": "^10.0.3",
+    "commitlint-config-jira": "^1.6.4",
+    "commitlint-plugin-jira-rules": "^1.6.4",
+    "cz-conventional-changelog": "^3.3.0",
+    "eslint": "^8.33.0",
+    "husky": "^8.0.3",
+    "purescript": "^0.15.3",
+    "spago": "^0.20.9"
   },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "compile": "eslint src && spago build",
+    "spago:install": "spago install",
+    "eslint:fix": "eslint src --fix",
+    "prepare": "husky install"
   },
   "repository": {
     "type": "git",
@@ -21,5 +38,61 @@
   },
   "author": "",
   "license": "ISC",
-  "homepage": "https://bitbucket.org/juspay/purescript-otp-reader#readme"
+  "homepage": "https://bitbucket.org/juspay/purescript-otp-reader#readme",
+  "config": {
+    "commitizen": {
+      "path": "./node_modules/@digitalroute/cz-conventional-changelog-for-jira",
+      "jiraPrefix": "PICAF",
+      "jiraLocation": "post-type",
+      "jiraAppend": ":"
+    }
+  },
+  "commitlint": {
+    "plugins": [
+      "commitlint-plugin-jira-rules"
+    ],
+    "extends": [
+      "jira"
+    ],
+    "rules": {
+      "jira-task-id-max-length": [
+        0
+      ],
+      "jira-commit-message-separator": [
+        0
+      ],
+      "jira-commit-status-case": [
+        0
+      ],
+      "jira-task-id-project-key": [
+        0
+      ],
+      "jira-task-id-separator": [
+        0
+      ],
+      "jira-task-id-case": [
+        0
+      ],
+      "jira-task-id-min-length": [
+        0
+      ]
+    }
+  },
+  "release": {
+    "branches": [
+      "main",
+      {
+        "name": "hotfix-[0-9]+",
+        "prerelease": true
+      }
+    ],
+    "repositoryUrl": "git@ssh.bitbucket.juspay.net:picaf/purescript-hyper-gpay.git",
+    "plugins": [
+      "@semantic-release/commit-analyzer",
+      "@semantic-release/release-notes-generator",
+      "@semantic-release/npm",
+      "@semantic-release/changelog",
+      "@semantic-release/git"
+    ]
+  }
 }
