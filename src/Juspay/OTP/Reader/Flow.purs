@@ -1,14 +1,15 @@
-module Juspay.OTP.Reader.Flow (
-    module Juspay.OTP.Reader,
-    getGodelOtpRules,
-    getSmsReadPermission,
-    requestSmsReadPermission,
-    smsPoller,
-    isConsentAPISupported,
-    isClipboardSupported,
-    OtpListener,
-    getOtpListener
-  ) where
+module Juspay.OTP.Reader.Flow
+  ( OtpListener
+  , getGodelOtpRules
+  , getOtpListener
+  , isClipboardSupported
+  , isConsentAPISupported
+  , module Juspay.OTP.Reader
+  , requestSmsReadPermission
+  , smsPoller
+  , getSmsReadPermission
+  )
+  where
 
 import Prelude
 
@@ -17,7 +18,7 @@ import Effect (Effect)
 import Effect.Aff (Aff, Milliseconds)
 import Effect.Class (liftEffect)
 import Foreign (F)
-import Juspay.OTP.Reader (Otp(..), OtpError(..), OtpRule(..), Sms(..), SmsReader(..), clipboard, extractOtp, getName, isConsentDeniedError, smsConsentAPI, smsReceiver)
+import Juspay.OTP.Reader (Otp(..), OtpError(..), OtpRule(..), Sms(..), SmsReader(..), clipboard, extractOtp, getName, isConsentDeniedError, smsConsentAPI, smsReceiver, PermissionResult(..))
 import Juspay.OTP.Reader as O
 import Presto.Core.Types.Language.Flow (Flow, doAff)
 
