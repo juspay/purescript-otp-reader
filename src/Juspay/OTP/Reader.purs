@@ -5,7 +5,6 @@ module Juspay.OTP.Reader (
     SmsReader(..),
     getName,
     smsReceiver,
-    smsRetriever,
     smsPoller,
     initiateSMSRetriever,
     isConsentAPISupported,
@@ -22,7 +21,8 @@ module Juspay.OTP.Reader (
     extractOtp,
     PermissionResult(..),
     trackAction,
-    isSmsPermissionGranted
+    getSmsPermissionStatus,
+    isSmsPermissionGrantedImpl
   ) where
 
 import Prelude
@@ -40,7 +40,6 @@ import Data.Generic.Rep (class Generic)
 import Data.Show.Generic (genericShow)
 import Data.Maybe (Maybe(..), fromMaybe, isJust, maybe)
 import Data.Newtype (class Newtype, unwrap, wrap)
-import Data.Nullable (Nullable, toMaybe)
 import Data.Number (fromString)
 import Data.Ord (greaterThan)
 import Data.String (Pattern(..), Replacement(..), replace)
@@ -152,7 +151,6 @@ instance decodeOtpRule :: Decode OtpRule where
 foreign import trackAction :: ∀ a. a -> String -> Effect Unit
 foreign import trackException :: String -> String -> Unit
 foreign import getGodelOtpRulesImpl :: Effect Foreign
-foreign import replaceDigitWithX :: String -> String
 
 -- | Gets bank OTP rules from Godel's config.
 getGodelOtpRules :: String -> Effect (F (Array OtpRule))
@@ -193,18 +191,18 @@ getSmsReadPermission = do
   a <- getSmsReadPermissionImpl
   pure a
 
-foreign import isSmsPermissionGranted :: Effect Boolean
+foreign import isSmsPermissionGrantedImpl :: Effect Boolean
 
 getSmsPermissionStatus :: Effect PermissionResult
 getSmsPermissionStatus = do
-  permissionGranted <- isSmsPermissionGranted
-  shouldShowRationale <- toMaybe <$> shouldShowRequestPermissionRationale
+  permissionGranted <- isSmsPermissionGrantedImpl
+  shouldShowRationale <- liftEffect shouldShowRequestPermissionRationale
   let fnName = "getSmsPermissionStatus"
   case permissionGranted, shouldShowRationale of
     true , _          -> do
       _ <- liftEffect $ trackAction {smsReadPermission: (show Granted), service: fnName } "otp_info"
       pure Granted
-    false, Just false -> do
+    false, false -> do
       _ <- liftEffect $ trackAction {smsReadPermission: (show DeniedNeverAskAgain), service: fnName } "otp_info"
       pure DeniedNeverAskAgain
     false, _          -> do
@@ -213,7 +211,7 @@ getSmsPermissionStatus = do
 
 
 foreign import requestSmsReadPermissionImpl :: (Boolean -> Effect Unit) -> Effect Unit
-foreign import shouldShowRequestPermissionRationale :: Effect (Nullable Boolean)
+foreign import shouldShowRequestPermissionRationale :: Effect Boolean
 
 -- | A type representing the result of `requestSmsReadPermission`.
 -- |
@@ -237,17 +235,17 @@ derive instance genericPermissionResult :: Generic PermissionResult _
 instance showPermissionResult :: Show PermissionResult where show = genericShow
 
 -- | Requests Android SMS Read permission from the user
-requestSmsReadPermission :: Aff Boolean
+requestSmsReadPermission :: Aff PermissionResult
 requestSmsReadPermission = do
   _ <- liftEffect $ trackAction {permissions_requested : ["READ_SMS", "RECEIVE_SMS"] } "otp"
   permissionGranted <- makeAff (\cb -> requestSmsReadPermissionImpl (Right >>> cb) *> pure nonCanceler)
   shouldShowRationale <- liftEffect shouldShowRequestPermissionRationale
   let fnName = "requestSmsReadPermission"
-  case permissionGranted, toMaybe shouldShowRationale of
+  case permissionGranted, shouldShowRationale of
     true, _           -> do
       _ <- liftEffect $ trackAction {smsReadPermission: (show Granted), service: fnName} "otp_info"
       pure Granted
-    false, Just false -> do
+    false, false -> do
       _ <- liftEffect $ trackAction {smsReadPermission: (show DeniedNeverAskAgain), service: fnName} "otp_info"
       pure DeniedNeverAskAgain
     false, _ -> do
@@ -345,7 +343,7 @@ foreign import stopSmsConsentAPI :: Effect Unit
 
 -- | Check if User Consent API functions are available
 foreign import isConsentAPISupported :: Effect Boolean
-foreign import updateUnmatchedSms' :: Array(Sms) ->  Effect Unit
+foreign import updateUnmatchedSmsImpl :: Array(Sms) ->  Effect Unit
 foreign import updateExtractedOtpStatus :: Boolean ->  Effect Unit
 
 consentDeniedErrorMessage :: String
@@ -484,18 +482,25 @@ getOtpListener readers = do
     smsReaders: readers
   }
   where
-    personalNumberRegex :: Regex
-    personalNumberRegex = unsafePartial $ fromRight $ regex "^[+][0-9]{10,}$" global
+    personalNumberRegex :: Maybe Regex
+    personalNumberRegex = case regex "^[+][0-9]{10,}$" global of
+      Left err -> Nothing
+      Right regex -> Just regex
+
+    matchMaybe :: Maybe Regex -> String -> Maybe (NonEmptyArray (Maybe String))
+    matchMaybe reg str = case reg of
+      Nothing -> Nothing
+      Just regex -> match regex str
 
     isNonPersonalMessage :: ReceivedSms -> Boolean
-    isNonPersonalMessage (ReceivedSms (Sms sms) reader) = not $ isJust $ match personalNumberRegex sms.from
+    isNonPersonalMessage (ReceivedSms (Sms sms) reader) = not $ isJust $ matchMaybe personalNumberRegex sms.from
 
     updateUnmatchedSms :: Array (ReceivedSms) -> Effect Unit
     updateUnmatchedSms smsArray = do
       -- this contains only the bank messages by masking digits (OTP) and excluding messages from personal number
       let nonPersonalSMS = filter isNonPersonalMessage smsArray
       let maskedSmsArray = map getMaskedSms nonPersonalSMS
-      updateUnmatchedSms' maskedSmsArray
+      updateUnmatchedSmsImpl maskedSmsArray
 
     -- Take a set of Affs, run them in parallel and return the first one that succeeds
     oneOfAff :: forall f a. (Foldable f) => (Functor f) => f (Aff a) -> Aff a
@@ -534,7 +539,9 @@ getOtpListener readers = do
 
 --Returns SMS with masked OTP
 getMaskedSms :: ReceivedSms -> Sms
-getMaskedSms (ReceivedSms (Sms sms) reader) = Sms{from : sms.from, body : replaceDigitWithX sms.body, time : sms.time}
+getMaskedSms (ReceivedSms (Sms sms) reader) = do
+  let newBody = replace (Pattern "[0123456789]") (Replacement "X") sms.body
+  Sms{from : sms.from, body : newBody, time : sms.time}
 
 
 -- | Return type of `getOtpListener` function.
@@ -626,20 +633,11 @@ makeRegex :: OtpRule -> String -> Maybe Regex
 makeRegex (OtpRule rule)  s = case regex s (ignoreCase) of
   Right r -> Just r
   Left err -> Nothing
-
-logRegexError :: OtpRule -> String -> Effect Unit
-logRegexError (OtpRule rule) s = case regex s (ignoreCase) of
-    Right r -> pure unit
-    Left err -> do
-      _ <- Tracker.trackException Tracker.ACTION Tracker.System Tracker.DETAILS "otp_reader" ("Regex syntax error \"" <> err <> "\" for rule: " <> encodeJSON (OtpRule rule)) (Object.empty)
-      pure unit
   
 -- | Used for tracking decode errors for values that should never have failed
 -- | a decode (such as `Sms` values retreived from Android or `OtpRule`s)
 
-decodeAndTrack :: forall a. Decode a => String -> Effect (Either MultipleErrors a)
+decodeAndTrack :: forall a. Decode a => String -> Either MultipleErrors a
 decodeAndTrack s = case runExcept $ decodeJSON s of
-  Right a -> pure $ Right a
-  Left err -> do
-    _ <- liftEffect $ Tracker.trackException Tracker.ACTION Tracker.System Tracker.DETAILS "otp_reader" ("decode exception: " <> show err) Object.empty
-    pure $ Left err
+  Right a -> Right a
+  Left err -> let _ = trackException "otp_reader" ("decode exception: " <> show err) in Left err

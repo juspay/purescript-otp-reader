@@ -4,19 +4,19 @@ const callbackMapper = prestoUI.callbackMapper;
 const loopedFunction = function(){
   return loopedFunction
 }
-var newInterface = false;
+let newInterface = false;
 const getTracker = function(){
   const trackerJson = window.JOS && window.JOS.tracker || {};
   if (typeof trackerJson._trackException !== "function"){
     trackerJson._trackException = loopedFunction;
   }
-  if (typeof trackerJson.__trackLifeCycle == "function" ){
+  if (typeof trackerJson.__trackLifeCycle === "function" ){
     newInterface = true;
   }
-  if (typeof trackerJson._trackAction != "function"){
-      trackerJson._trackAction = loopedFunction;
+  if (typeof trackerJson._trackAction !== "function"){
+    trackerJson._trackAction = loopedFunction;
   }
-  if (typeof trackerJson.__trackAction != "function"){
+  if (typeof trackerJson.__trackAction !== "function"){
     trackerJson.__trackAction = loopedFunction;
   }
   return trackerJson;
@@ -26,7 +26,7 @@ const tracker = getTracker();
 export const updateUnmatchedSmsImpl = function(smsArray){
   return function(){
     if (window && window.updateUnmatchedSms){
-        window.updateUnmatchedSms = window.updateUnmatchedSms.concat(smsArray);
+      window.updateUnmatchedSms = window.updateUnmatchedSms.concat(smsArray);
     }
     else{
       window.updateUnmatchedSms = smsArray;
@@ -37,7 +37,7 @@ export const updateUnmatchedSmsImpl = function(smsArray){
 export const updateExtractedOtpStatus = function(hasOtpExtracted){
   return function(){
     if(window){
-      if (window.isOtpExtracted != null || window.isOtpExtracted != undefined) {
+      if (window.isOtpExtracted !== null || window.isOtpExtracted !== undefined) {
         window.isOtpExtracted = hasOtpExtracted || window.isOtpExtracted;
       }
       else {
@@ -47,42 +47,38 @@ export const updateExtractedOtpStatus = function(hasOtpExtracted){
   }
 }
 
-export const replaceDigitWithX = function(s){
-  try {
-    return s.replace(/[0-9]/g, "X")
-  }
-  catch (e){
-    return "";
-  }
-}
-
 export const getLogJson = function(){
   return window.logJson
 }
 
-export const trackAction = function(value){
+export const trackAction = function(_value){
   return function(lbl){
     return function(){
       const sub = "system";
       const label = lbl;
-      const json = (window.logJson && typeof window.logJson == "object") ? window.logJson : {};
+      const json = (window.logJson && typeof window.logJson === "object") ? window.logJson : {};
       const level = "info";
-      if(typeof value == "string"){
-          try{
-              value = JSON.parse(value);
-          }
-          catch(e){
-              //Ignore
-          }
+      let value = _value;
+      if(typeof value === "string"){
+        try{
+          value = JSON.parse(value);
+        }
+        catch(e){
+          //Ignore
+        }
       }
-      newInterface ? tracker.__trackAction(sub)(level)(label)(value)(json)() : tracker._trackAction(sub)(level)(label)(value)();
+      if (newInterface) {
+        tracker.__trackAction(sub)(level)(label)(value)(json)();
+      } else {
+        tracker._trackAction(sub)(level)(label)(value)();
+      }
     }
   }
 }
 
 export const trackException = function (label) {
   return function(value) {
-    JBridge.trackEvent("dui", "error", "OTPReader_Exception", label + ": " + value)
+    window.JBridge.trackEvent("dui", "error", "OTPReader_Exception", label + ": " + value)
   }
 };
 
@@ -103,7 +99,11 @@ export const getGodelOtpRulesImpl = function() {
     const config = JSON.parse(w.getConfigString());
 
     document.body.removeChild(iframe);
-    newInterface ? tracker.__trackAction("system")("info")("page")({godel_config_version : config.version})({})() : tracker._trackAction("system")("info")("page")({godel_config_version : config.version})();
+    if (newInterface) {
+      tracker.__trackAction("system")("info")("page")({godel_config_version : config.version})({})();
+    } else {
+      tracker._trackAction("system")("info")("page")({godel_config_version : config.version})();
+    }
     return config.otp_rules;
   } catch(e) {
     console.error(e);
@@ -115,11 +115,7 @@ export const getSmsReadPermissionImpl = function () {
   try {
     const data = window.JBridge.checkReadSMSPermission();
     const permissions = JSON.parse(data);
-    if(permissions["READ_SMS"] === true && permissions["RECEIVE_SMS"] === true) {
-      return true
-    } else {
-      return false
-    }
+    return (permissions["READ_SMS"] === true && permissions["RECEIVE_SMS"] === true);
   } catch(e) {
     //TODO track this
     return false
@@ -128,13 +124,9 @@ export const getSmsReadPermissionImpl = function () {
 
 export const isSmsPermissionGrantedImpl = function () {
   try {
-    var data = JBridge.checkReadSMSPermission();
-    var permissions = JSON.parse(data);
-    if(permissions["READ_SMS"] === true && permissions["RECEIVE_SMS"] === true) {
-      return true
-    } else {
-      return false
-    }
+    const data = window.JBridge.checkReadSMSPermission();
+    const permissions = JSON.parse(data);
+    return (permissions["READ_SMS"] === true && permissions["RECEIVE_SMS"] === true) 
   } catch(e) {
     //TODO track this
     return false
@@ -165,23 +157,23 @@ export const requestSmsReadPermissionImpl = function(callback) {
   }
 }
 
-exports.shouldShowRequestPermissionRationale = function() {
+export const shouldShowRequestPermissionRationale = function() {
   try {
-    if(typeof JBridge.shouldShowRequestPermissionRationale == "function") {
-      var shouldShowREAD = JBridge.shouldShowRequestPermissionRationale("android.permission.READ_SMS");
-      var shouldShowRECEIVE = JBridge.shouldShowRequestPermissionRationale("android.permission.RECEIVE_SMS");
+    if(typeof window.JBridge.shouldShowRequestPermissionRationale === "function") {
+      const shouldShowREAD = window.JBridge.shouldShowRequestPermissionRationale("android.permission.READ_SMS");
+      const shouldShowRECEIVE = window.JBridge.shouldShowRequestPermissionRationale("android.permission.RECEIVE_SMS");
 
-      var isBooleanString = function(a) { return a === "true" || a === "false" }
+      const isBooleanString = function(a) { return a === "true" || a === "false" }
 
       if(!isBooleanString(shouldShowREAD) || !isBooleanString(shouldShowRECEIVE)) {
-        return null;
+        return false;
       } else {
         return shouldShowREAD === "true" && shouldShowRECEIVE === "true"
       }
     }
   } catch(e) {
     //TODO track this
-    return null;
+    return false;
   }
 }
 
@@ -279,7 +271,7 @@ export const isConsentAPISupported = function() {
   }
 }
 
-var consentStartedLogged = false;
+let consentStartedLogged = false;
 
 export const startSmsConsentAPI = function (callback) {
   return function(left) {
@@ -298,11 +290,16 @@ export const startSmsConsentAPI = function (callback) {
               const label = "SMS_CONSENT";
               const level = "info";
               const value = {sms_consent_listener: "SmsConsent listener started successfully"}
-              const json = (window.logJson && typeof window.logJson == "object") ? window.logJson : {};
-              newInterface ? tracker.__trackAction(sub)(level)(label)(value)(json)()
-                            : tracker._trackAction(sub)(level)(label)(value)();
+              const json = (window.logJson && typeof window.logJson === "object") ? window.logJson : {};
+              if (newInterface) {
+                tracker.__trackAction(sub)(level)(label)(value)(json)()
+              } else {
+                tracker._trackAction(sub)(level)(label)(value)();
+              }
               consentStartedLogged = true
-            } catch(err) {}
+            } catch(err) {
+              // Ignore
+            }
           }
 
         } catch(e) {

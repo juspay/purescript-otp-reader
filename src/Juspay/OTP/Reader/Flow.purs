@@ -58,7 +58,7 @@ getSmsReadPermission = doAff' $ liftEffect O.getSmsReadPermission
 
 -- | Flow e version of `getSmsReadPermission` from Juspay.OTP.Reader
 -- | Requests Android SMS Read permission from the user
-requestSmsReadPermission :: forall e. Flow e Boolean
+requestSmsReadPermission :: forall e. Flow e PermissionResult
 requestSmsReadPermission = doAff' O.requestSmsReadPermission
 
 type OtpListener e = {
